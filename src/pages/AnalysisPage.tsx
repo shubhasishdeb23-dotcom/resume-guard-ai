@@ -29,7 +29,7 @@ import { useToast } from '../context/ToastContext';
 import { ResumeScore } from '../types';
 import { generatePDFReport, generateTextReport, copyToClipboard, shareViaEmail, getShareableLink, ExportData } from '../utils/exportReport';
 import { runVerificationEngine } from '../utils/verificationEngine';
-import { getAIInsights, AI_MODELS } from '../utils/llm';
+import { getAIInsights, getOllamaModels, getOllamaEndpoint, setOllamaEndpoint, AI_MODELS } from '../utils/llm';
 import ScoreGauge from '../components/ScoreGauge';
 import ScoreCard from '../components/ScoreCard';
 import SkillTable from '../components/SkillTable';
@@ -47,6 +47,27 @@ const AnalysisPage: React.FC = () => {
   const [aiInsights, setAiInsights] = useState('');
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [aiModel, setAiModel] = useState(AI_MODELS[0]);
+  const [aiEndpoint, setAiEndpoint] = useState(getOllamaEndpoint());
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+  const modelOptions = Array.from(new Set([...AI_MODELS, ...availableModels]));
+
+  useEffect(() => {
+    let cancelled = false;
+    getOllamaModels(aiEndpoint)
+      .then(models => {
+        if (!cancelled) setAvailableModels(models);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableModels([]);
+      });
+    return () => { cancelled = true; };
+  }, [aiEndpoint]);
+
+  const handleEndpointChange = (endpoint: string) => {
+    setAiEndpoint(endpoint);
+    setOllamaEndpoint(endpoint);
+  };
 
   const handleAddToRecruiterPool = () => {
     if (!currentResume || addedToPool) return;
@@ -66,7 +87,10 @@ const AnalysisPage: React.FC = () => {
       showToast('success', 'AI insights generated');
     } catch (error) {
       console.error('AI insights failed:', error);
-      showToast('error', 'Could not reach Ollama. Make sure it is running (ollama serve).');
+      showToast(
+        'error',
+        `Could not reach Ollama at ${getOllamaEndpoint()}. Make sure it is running, and on the machine running Ollama set OLLAMA_ORIGINS to include "${window.location.origin}", then restart it.`
+      );
     } finally {
       setIsGeneratingInsights(false);
     }
@@ -447,13 +471,21 @@ const AnalysisPage: React.FC = () => {
                 <Cpu className="w-5 h-5 text-cyan-400" />
                 AI Insights (local Ollama)
               </h2>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="text"
+                  value={aiEndpoint}
+                  onChange={(e) => handleEndpointChange(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  title="Ollama server URL (e.g. http://localhost:11434)"
+                  className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 w-full sm:w-48"
+                />
                 <select
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
                   className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500"
                 >
-                  {AI_MODELS.map(model => (
+                  {modelOptions.map(model => (
                     <option key={model} value={model}>{model}</option>
                   ))}
                 </select>
@@ -479,8 +511,9 @@ const AnalysisPage: React.FC = () => {
               <pre className="whitespace-pre-wrap text-sm text-slate-300 leading-relaxed bg-slate-900/60 border border-slate-700/50 rounded-xl p-4">{aiInsights}</pre>
             ) : (
               <p className="text-sm text-slate-500">
-                Generate a targeted strengths / weaknesses / red flags / suggestions review using the local Ollama model. Requires{' '}
-                <code className="text-cyan-400">ollama serve</code> running on this machine.
+                Generate a targeted strengths / weaknesses / red flags / suggestions review using a local Ollama model. Requires{' '}
+                <code className="text-cyan-400">ollama serve</code> running, with this site's origin in{' '}
+                <code className="text-cyan-400">OLLAMA_ORIGINS</code> (e.g. set it to <code className="text-cyan-400">*</code>), then restart Ollama.
               </p>
             )}
           </div>

@@ -1,8 +1,42 @@
 import { ParsedResume } from '../types';
 
-const OLLAMA_ENDPOINT = 'http://localhost:11434/api/generate';
+const OLLAMA_ENDPOINT_KEY = 'rg.ollama_endpoint';
+const DEFAULT_ENDPOINT = 'http://localhost:11434';
 
 export const AI_MODELS = ['llama3', 'llama3.2', 'qwen2.5:7b'];
+
+export function getOllamaEndpoint(): string {
+  try {
+    const saved = localStorage.getItem(OLLAMA_ENDPOINT_KEY);
+    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
+  } catch (error) {
+    console.warn('Failed to read Ollama endpoint:', error);
+  }
+  return DEFAULT_ENDPOINT;
+}
+
+export function setOllamaEndpoint(endpoint: string): void {
+  try {
+    localStorage.setItem(OLLAMA_ENDPOINT_KEY, endpoint.trim().replace(/\/+$/, ''));
+  } catch (error) {
+    console.warn('Failed to save Ollama endpoint:', error);
+  }
+}
+
+export async function getOllamaModels(endpoint: string): Promise<string[]> {
+  const base = endpoint.trim().replace(/\/+$/, '') || DEFAULT_ENDPOINT;
+  const response = await fetch(`${base}/api/tags`);
+  if (!response.ok) {
+    throw new Error(`Ollama returned HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  const models: string[] = Array.isArray(data?.models)
+    ? data.models
+        .map((m: { name?: string; model?: string }) => m.name || m.model || '')
+        .filter(Boolean)
+    : [];
+  return Array.from(new Set(models)).sort();
+}
 
 function buildPrompt(resume: ParsedResume): string {
   const skills = resume.skills.map(s => s.name).join(', ') || 'None listed';
@@ -32,7 +66,8 @@ Be direct, specific, and professional. Keep the whole response under 250 words.`
 }
 
 export async function getAIInsights(resume: ParsedResume, model: string = 'llama3'): Promise<string> {
-  const response = await fetch(OLLAMA_ENDPOINT, {
+  const endpoint = getOllamaEndpoint();
+  const response = await fetch(`${endpoint}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
