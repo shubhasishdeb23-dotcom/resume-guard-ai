@@ -20,4 +20,20 @@ describe('runVerificationEngine', () => {
     const rich = runVerificationEngine(richResume()).overallEvidenceScore;
     expect(rich).toBeGreaterThan(empty);
   });
+
+  it('detects employment gaps and impossible date ranges', () => {
+    const resume = emptyResume();
+    resume.experience = [
+      { id: 'e1', company: 'Alpha Co', role: 'Engineer', startDate: '2021-01', endDate: '2021-06', current: false, responsibilities: [], technologies: [], achievements: [], metrics: [] },
+      { id: 'e2', company: 'Beta Co', role: 'Engineer', startDate: '2022-06', current: true, responsibilities: [], technologies: [], achievements: [], metrics: [] },
+      { id: 'e3', company: 'Bad Dates', role: 'Engineer', startDate: '2021-11', endDate: '2021-01', current: false, responsibilities: [], technologies: [], achievements: [], metrics: [] },
+    ];
+
+    const result = runVerificationEngine(resume);
+    const types = result.timelineAnalysis.issues.map(i => i.type);
+
+    expect(types).toContain('gap');
+    expect(types).toContain('impossible');
+    expect(result.triggeredRules.find(r => r.id === 'RULE-011')?.triggered).toBe(true);
+  });
 });

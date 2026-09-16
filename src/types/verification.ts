@@ -22,7 +22,8 @@ export type RuleId =
   | 'RULE-007'
   | 'RULE-008'
   | 'RULE-009'
-  | 'RULE-010';
+  | 'RULE-010'
+  | 'RULE-011';
 
 export interface Claim {
   id: string;

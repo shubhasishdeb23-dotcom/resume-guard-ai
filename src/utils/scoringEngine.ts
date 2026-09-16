@@ -1,5 +1,16 @@
 import { ParsedResume, ResumeScore, ScoreComponent, SkillEntry } from '../types';
 
+export function calculateQualityScore(resume: ParsedResume): number {
+  const b = calculateResumeScore(resume).breakdown;
+  const weighted =
+    b.readability.score * 0.25 +
+    b.atsCompatibility.score * 0.25 +
+    b.projectStrength.score * 0.20 +
+    b.quantification.score * 0.15 +
+    b.consistency.score * 0.15;
+  return Math.round(weighted);
+}
+
 export function calculateResumeScore(resume: ParsedResume): ResumeScore {
   const atsCompatibility = calculateATSScore(resume);
   const skillRelevance = calculateSkillScore(resume.skills);

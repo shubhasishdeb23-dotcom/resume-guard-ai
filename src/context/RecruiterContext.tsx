@@ -4,6 +4,7 @@ import { JobDescription, CandidateMatch, CandidateProfile, RecruiterDecision, Da
 import { parseJobDescription } from '../utils/jobParser';
 import { matchCandidateToJob } from '../utils/jobMatcher';
 import { analyzeATS } from '../utils/atsAnalyzer';
+import { analyzeContextualSkillDepth } from '../utils/skillDepth';
 import { DEMO_JOB, DEMO_CANDIDATES } from '../data/demoCandidates';
 import { ParsedResume } from '../types';
 import { saveState, loadState } from '../utils/storage';
@@ -194,6 +195,7 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       experience: `${yearsExp} years`,
       overallScore: 0,
       evidenceScore,
+      skillDepthScore: analyzeContextualSkillDepth(resume).score,
       atsScore: analyzeATS(resume).score,
       skillMatch: 0,
       riskSignals: resume.skills.filter(s => s.supportLevel === 'unsupported').length,
@@ -281,19 +283,22 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const compareCandidates = useCallback((candidateIds: string[]) => {
     const selectedCandidates = candidates.filter(c => candidateIds.includes(c.id));
     const selectedMatches = matches.filter(m => candidateIds.includes(m.resumeId));
-    
+
+    const depthScores = selectedCandidates.map(c => c.skillDepthScore ?? c.evidenceScore);
+
     const categories: {
       name: string;
       values: number[];
       highlights: string[];
     }[] = [
       { name: 'Skill Fit', values: selectedMatches.map(m => m.skillMatch.score), highlights: [] },
+      { name: 'Skill Depth (Context)', values: depthScores, highlights: [] },
       { name: 'Evidence', values: selectedMatches.map(m => m.evidenceMatch.score), highlights: [] },
       { name: 'Job Fit', values: selectedMatches.map(m => m.overallFit), highlights: [] },
       { name: 'Experience', values: selectedMatches.map(m => m.experienceMatch.score), highlights: [] },
       { name: 'Education', values: selectedMatches.map(m => m.educationMatch.score), highlights: [] },
     ];
-    
+
     categories.forEach(cat => {
       const maxVal = Math.max(...cat.values);
       const minVal = Math.min(...cat.values);
@@ -303,15 +308,17 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return '';
       });
     });
-    
-    const bestIdx = selectedMatches.reduce((best, m, i) => 
-      m.overallFit > selectedMatches[best].overallFit ? i : best, 0);
-    
+
+    const aiScores = selectedMatches.map((m, i) =>
+      m.overallFit * 0.5 + m.evidenceMatch.score * 0.3 + (depthScores[i] || 0) * 0.2
+    );
+    const bestIdx = aiScores.indexOf(Math.max(...aiScores));
+
     return {
       candidates: selectedCandidates,
       categories,
       summary: `Comparing ${selectedCandidates.length} candidates for ${currentJob?.title || 'position'}`,
-      recommendation: `${selectedCandidates[bestIdx]?.name || 'Candidate'} has the strongest overall fit`,
+      recommendation: `${selectedCandidates[bestIdx]?.name || 'No candidate'} proves skills with real project context (Skill Depth ${depthScores[bestIdx] || 0}%) alongside the strongest evidence — the AI picks this candidate.`,
     };
   }, [candidates, matches, currentJob]);
 

@@ -30,6 +30,8 @@ import { ResumeScore } from '../types';
 import { generatePDFReport, generateTextReport, copyToClipboard, shareViaEmail, getShareableLink, ExportData } from '../utils/exportReport';
 import { runVerificationEngine } from '../utils/verificationEngine';
 import { getAIInsights, getOllamaModels, getOllamaEndpoint, setOllamaEndpoint, AI_MODELS } from '../utils/llm';
+import { calculateQualityScore } from '../utils/scoringEngine';
+import { analyzeContextualSkillDepth } from '../utils/skillDepth';
 import ScoreGauge from '../components/ScoreGauge';
 import ScoreCard from '../components/ScoreCard';
 import SkillTable from '../components/SkillTable';
@@ -42,6 +44,8 @@ const AnalysisPage: React.FC = () => {
   const { showToast } = useToast();
   const [score, setScore] = useState<ResumeScore | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [qualityScore, setQualityScore] = useState(0);
+  const [evidenceScore, setEvidenceScore] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [addedToPool, setAddedToPool] = useState(false);
   const [aiInsights, setAiInsights] = useState('');
@@ -105,6 +109,8 @@ const AnalysisPage: React.FC = () => {
     setTimeout(() => {
       const resumeScore = getScore(currentResume.id);
       setScore(resumeScore);
+      setQualityScore(calculateQualityScore(currentResume));
+      setEvidenceScore(runVerificationEngine(currentResume).overallEvidenceScore);
       setIsLoading(false);
     }, 500);
     setAddedToPool(false);
@@ -120,7 +126,7 @@ const AnalysisPage: React.FC = () => {
       uploadedAt: currentResume.uploadedAt.toLocaleString(),
       overallScore: score.overall,
       atsScore: score.breakdown.atsCompatibility.score,
-      evidenceScore: score.breakdown.credibility.score,
+      evidenceScore,
       skillMatch: score.breakdown.skillRelevance.score,
       breakdown: Object.entries(score.breakdown).map(([key, value]) => ({
         name: formatLabel(key),
@@ -152,7 +158,7 @@ const AnalysisPage: React.FC = () => {
       uploadedAt: currentResume.uploadedAt.toLocaleString(),
       overallScore: score.overall,
       atsScore: score.breakdown.atsCompatibility.score,
-      evidenceScore: score.breakdown.credibility.score,
+      evidenceScore,
       skillMatch: score.breakdown.skillRelevance.score,
       breakdown: Object.entries(score.breakdown).map(([key, value]) => ({
         name: formatLabel(key),
@@ -212,6 +218,8 @@ const AnalysisPage: React.FC = () => {
       </div>
     );
   }
+
+  const skillDepth = analyzeContextualSkillDepth(currentResume);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -342,20 +350,37 @@ const AnalysisPage: React.FC = () => {
             size="lg"
           />
           <ScoreGauge
+            value={qualityScore}
+            label="Quality Score"
+            size="md"
+          />
+          <ScoreGauge
+            value={evidenceScore}
+            label="Evidence Strength"
+            size="md"
+          />
+          <ScoreGauge
             value={score?.breakdown.atsCompatibility.score || 0}
             label="ATS Compatibility"
             size="md"
           />
-          <ScoreGauge
-            value={score?.breakdown.skillRelevance.score || 0}
-            label="Skill Evidence"
-            size="md"
-          />
-          <ScoreGauge
-            value={score?.breakdown.credibility.score || 0}
-            label="Credibility"
-            size="md"
-          />
+        </motion.div>
+
+        {/* Quality vs Evidence note */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          className="mb-8"
+        >
+          <div className="bg-gradient-to-r from-indigo-600/20 to-cyan-600/20 border border-indigo-500/30 rounded-2xl p-4">
+            <p className="text-sm text-slate-300">
+              <strong className="text-white">Two clear scores:</strong>{' '}
+              <span className="text-cyan-300">Quality</span> measures how well the resume is written.{' '}
+              <span className="text-purple-300">Evidence Strength</span> measures how well claims are backed by real project or work context.
+              A well-written resume can still have weak evidence.
+            </p>
+          </div>
         </motion.div>
 
         {/* Verification CTA */}
@@ -415,6 +440,19 @@ const AnalysisPage: React.FC = () => {
               Quick Insights
             </h2>
             <div className="space-y-3">
+              {skillDepth.score > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                  <Brain className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-indigo-200">
+                      {skillDepth.score}% of skills proven in project context
+                    </p>
+                    <p className="text-xs text-indigo-400/70 mt-1">
+                      The AI favors candidates who back skills with real project context
+                    </p>
+                  </div>
+                </div>
+              )}
               {currentResume.skills.filter(s => s.supportLevel === 'unsupported').length > 0 && (
                 <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />

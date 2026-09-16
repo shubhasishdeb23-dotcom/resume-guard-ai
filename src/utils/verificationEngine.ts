@@ -328,36 +328,88 @@ function analyzeTimeline(resume: ParsedResume): { events: TimelineEvent[]; issue
     });
   });
   
-  events.sort((a, b) => {
-    const dateA = new Date(a.startDate);
-    const dateB = new Date(b.startDate);
-    return dateB.getTime() - dateA.getTime();
-  });
-  
-  for (let i = 0; i < events.length - 1; i++) {
-    const current = events[i];
-    const next = events[i + 1];
-    
-    if (current.type === 'employment' && next.type === 'employment') {
-      if (current.endDate && next.startDate) {
-        const currentEnd = new Date(current.endDate);
-        const nextStart = new Date(next.startDate);
-        
-        if (currentEnd > nextStart) {
+  events.sort((a, b) => parseMonthKey(b.startDate) - parseMonthKey(a.startDate));
+
+  const workEvents = events.filter(e => e.type === 'employment' || e.type === 'internship');
+
+  for (let i = 0; i < workEvents.length - 1; i++) {
+    for (let j = i + 1; j < workEvents.length; j++) {
+      const early = workEvents[i];
+      const late = workEvents[j];
+      if (early.endDate && late.startDate) {
+        const earlyEnd = parseMonthKey(early.endDate);
+        const lateStart = parseMonthKey(late.startDate);
+        if (isFinite(earlyEnd) && isFinite(lateStart) && earlyEnd > lateStart) {
           issues.push({
-            id: `issue_${Date.now()}_${i}`,
+            id: `issue_overlap_${Date.now()}_${i}_${j}`,
             type: 'overlap',
             severity: 'medium',
-            events: [current, next],
-            description: `Timeline overlap detected: ${current.organization} (${current.startDate} - ${current.endDate}) overlaps with ${next.organization} (${next.startDate} - ${next.endDate})`,
+            events: [early, late],
+            description: `Timeline overlap detected: ${early.organization} (${early.startDate} - ${early.endDate}) overlaps with ${late.organization} (${late.startDate} - ${late.endDate})`,
             recommendation: 'Clarify if these were concurrent positions or if dates need correction.',
           });
         }
       }
     }
   }
-  
+
+  const ascending = [...workEvents].sort((a, b) => parseMonthKey(a.startDate) - parseMonthKey(b.startDate));
+  for (let i = 0; i < ascending.length - 1; i++) {
+    const earlier = ascending[i];
+    const later = ascending[i + 1];
+    if (earlier.endDate && later.startDate) {
+      const earlierEnd = parseMonthKey(earlier.endDate);
+      const laterStart = parseMonthKey(later.startDate);
+      if (isFinite(earlierEnd) && isFinite(laterStart) && earlierEnd < laterStart) {
+        const gapMonths = laterStart - earlierEnd;
+        if (gapMonths > 3) {
+          issues.push({
+            id: `issue_gap_${Date.now()}_${i}`,
+            type: 'gap',
+            severity: gapMonths > 12 ? 'high' : 'medium',
+            events: [earlier, later],
+            description: `Employment gap of ~${gapMonths} months between ${earlier.organization} (${earlier.startDate} - ${earlier.endDate}) and ${later.organization} (${later.startDate} - ${later.endDate})`,
+            recommendation: 'Ask the candidate to account for this gap (study, freelance, travel, etc.).',
+          });
+        }
+      }
+    }
+  }
+
+  const allEntries = [...resume.experience, ...resume.internships, ...resume.education] as Array<{
+    company?: string;
+    institution?: string;
+    role?: string;
+    current?: boolean;
+    startDate: string;
+    endDate?: string;
+  }>;
+
+  allEntries.forEach(entry => {
+    const org = (entry.company || entry.institution || entry.role) || 'entry';
+    if (entry.startDate && entry.endDate && !entry.current) {
+      const start = parseMonthKey(entry.startDate);
+      const end = parseMonthKey(entry.endDate);
+      if (isFinite(start) && isFinite(end) && end < start) {
+        issues.push({
+          id: `issue_impossible_${Date.now()}_${org}`,
+          type: 'impossible',
+          severity: 'critical',
+          events: [],
+          description: `Impossible date range: ${org} starts ${entry.startDate} but ends ${entry.endDate}`,
+          recommendation: 'Dates must not end before they begin — confirm the real dates with the candidate.',
+        });
+      }
+    }
+  });
+
   return { events, issues };
+}
+
+function parseMonthKey(dateStr: string): number {
+  const parts = String(dateStr || '').trim().split('-').map(Number);
+  if (!parts[0] || isNaN(parts[0])) return NaN;
+  return parts[0] * 12 + (parts[1] ? parts[1] - 1 : 6);
 }
 
 function verifySkills(resume: ParsedResume) {
@@ -697,6 +749,15 @@ function runRuleEngine(
       triggered: false,
       evidence: [],
       recommendation: 'Compare with previous resume versions if available.',
+    },
+    {
+      id: 'RULE-011',
+      name: 'Employment Gap or Impossible Date',
+      description: 'Resume shows unexplained employment gaps or date ranges that end before they begin',
+      severity: 'medium',
+      triggered: timelineIssues.some(i => i.type === 'gap' || i.type === 'impossible'),
+      evidence: timelineIssues.filter(i => i.type === 'gap' || i.type === 'impossible').map(i => i.description),
+      recommendation: 'Ask the candidate to account for employment gaps and clarify any inconsistent dates.',
     },
   ];
   

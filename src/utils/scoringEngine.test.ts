@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateResumeScore } from './scoringEngine';
+import { calculateResumeScore, calculateQualityScore } from './scoringEngine';
 import { emptyResume, richResume } from './testFixtures';
 
 describe('calculateResumeScore', () => {
@@ -18,6 +18,20 @@ describe('calculateResumeScore', () => {
   it('scores a rich resume higher than an empty one', () => {
     const empty = calculateResumeScore(emptyResume()).overall;
     const rich = calculateResumeScore(richResume()).overall;
+    expect(rich).toBeGreaterThan(empty);
+  });
+});
+
+describe('calculateQualityScore', () => {
+  it('returns a quality score between 0 and 100', () => {
+    const score = calculateQualityScore(richResume());
+    expect(score).toBeGreaterThanOrEqual(0);
+    expect(score).toBeLessThanOrEqual(100);
+  });
+
+  it('scores a rich resume higher than an empty one', () => {
+    const empty = calculateQualityScore(emptyResume());
+    const rich = calculateQualityScore(richResume());
     expect(rich).toBeGreaterThan(empty);
   });
 });

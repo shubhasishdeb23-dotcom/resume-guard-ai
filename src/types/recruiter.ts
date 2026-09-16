@@ -91,6 +91,7 @@ export interface CandidateProfile {
   experience: string;
   overallScore: number;
   evidenceScore: number;
+  skillDepthScore?: number;
   atsScore: number;
   skillMatch: number;
   riskSignals: number;

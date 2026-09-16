@@ -59,6 +59,14 @@ const CompareCandidatesPage: React.FC = () => {
           }),
         },
         {
+          name: 'Skill Depth (Context)',
+          values: selectedDemos.map(dc => dc.profile.skillDepthScore ?? dc.profile.evidenceScore),
+          highlights: selectedDemos.map((dc, i) => {
+            const max = Math.max(...selectedDemos.map(d => d.profile.skillDepthScore ?? d.profile.evidenceScore));
+            return (dc.profile.skillDepthScore ?? dc.profile.evidenceScore) === max ? 'Best' : '';
+          }),
+        },
+        {
           name: 'Evidence',
           values: selectedDemos.map(dc => dc.profile.evidenceScore),
           highlights: selectedDemos.map((dc, i) => {
@@ -91,15 +99,18 @@ const CompareCandidatesPage: React.FC = () => {
   
   const generateRecommendation = (demos: typeof DEMO_CANDIDATES) => {
     const sorted = [...demos].sort((a, b) => {
-      const scoreA = a.match.overallFit * 0.6 + a.profile.evidenceScore * 0.4;
-      const scoreB = b.match.overallFit * 0.6 + b.profile.evidenceScore * 0.4;
+      const depthA = a.profile.skillDepthScore ?? a.profile.evidenceScore;
+      const depthB = b.profile.skillDepthScore ?? b.profile.evidenceScore;
+      const scoreA = a.match.overallFit * 0.5 + a.profile.evidenceScore * 0.3 + depthA * 0.2;
+      const scoreB = b.match.overallFit * 0.5 + b.profile.evidenceScore * 0.3 + depthB * 0.2;
       return scoreB - scoreA;
     });
-    
+
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
-    
-    return `${best.name} has the strongest evidence-backed profile. Note: ${worst.name} has impressive resume writing but lower evidence strength.`;
+    const bestDepth = best.profile.skillDepthScore ?? best.profile.evidenceScore;
+
+    return `${best.name} proves skills with real project context (Skill Depth ${bestDepth}%) and strong evidence — the AI picks this candidate. Note: ${worst.name} has impressive resume writing but lower evidence strength and skill depth.`;
   };
   
   const getScoreColor = (score: number) => {
