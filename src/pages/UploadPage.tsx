@@ -9,7 +9,8 @@ import {
   Loader2, 
   ArrowRight,
   Shield,
-  AlertCircle
+  AlertCircle,
+  Cpu
 } from 'lucide-react';
 import { useResume } from '../context/ResumeContext';
 
@@ -72,6 +73,7 @@ const UploadPage: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [loadingSample, setLoadingSample] = useState<string | null>(null);
 
   const acceptedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
   const acceptedExtensions = '.pdf,.docx,.txt';
@@ -113,6 +115,31 @@ const UploadPage: React.FC = () => {
       navigate('/analysis');
     }, 1000);
   }, [uploadResume, navigate]);
+
+  const loadSampleFile = useCallback(async (kind: 'pdf' | 'docx' | 'txt') => {
+    if (kind === 'txt') {
+      handleFile(new File([SAMPLE_RESUME], 'sample_resume.txt', { type: 'text/plain' }));
+      return;
+    }
+
+    const name = kind === 'pdf' ? 'Alex_Carter_Resume.pdf' : 'Alex_Carter_Resume.docx';
+    const type = kind === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    try {
+      setLoadingSample(kind);
+      const response = await fetch(`${import.meta.env.BASE_URL}samples/${name}`);
+      if (!response.ok) throw new Error(`Sample fetch failed: HTTP ${response.status}`);
+      const blob = await response.blob();
+      await handleFile(new File([blob], name, { type }));
+    } catch (error) {
+      console.error('Failed to load sample file:', error);
+      alert('Could not load the sample file. Please upload your own resume instead.');
+    } finally {
+      setLoadingSample(null);
+    }
+  }, [handleFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -300,19 +327,31 @@ const UploadPage: React.FC = () => {
           )}
         </AnimatePresence>
 
-        {/* Sample Resume */}
+        {/* Sample Resumes */}
         {!selectedFile && (
           <div className="text-center mt-6">
-            <button
-              onClick={() => {
-                const file = new File([SAMPLE_RESUME], 'sample_resume.txt', { type: 'text/plain' });
-                handleFile(file);
-              }}
-              className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
-            >
-              <FileText className="w-4 h-4" />
-              No resume handy? Try a sample resume
-            </button>
+            <p className="text-slate-400 text-sm mb-3">No resume handy? Try a sample file:</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {([
+                { kind: 'pdf' as const, label: 'Sample PDF' },
+                { kind: 'docx' as const, label: 'Sample DOCX' },
+                { kind: 'txt' as const, label: 'Sample TXT' },
+              ]).map(({ kind, label }) => (
+                <button
+                  key={kind}
+                  onClick={() => loadSampleFile(kind)}
+                  disabled={loadingSample !== null}
+                  className="inline-flex items-center gap-2 text-slate-300 hover:text-white transition-colors text-sm border border-slate-700/60 hover:border-slate-500 rounded-lg px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingSample === kind ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -321,7 +360,7 @@ const UploadPage: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4"
+          className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         >
           <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
             <div className="flex items-start gap-3">
@@ -343,6 +382,21 @@ const UploadPage: React.FC = () => {
               <div>
                 <h3 className="font-medium text-white mb-1">Full Extraction</h3>
                 <p className="text-sm text-slate-400">We extract skills, projects, experience, and more.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-violet-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Cpu className="w-5 h-5 text-violet-400" />
+              </div>
+              <div>
+                <h3 className="font-medium text-white mb-1">How Parsing Works</h3>
+                <p className="text-sm text-slate-400">
+                  Text is extracted in your browser (pdf.js / mammoth) and structured with rule-based
+                  section detection — no trained BERT model. Optional AI insights can run on a local LLM.
+                </p>
               </div>
             </div>
           </div>

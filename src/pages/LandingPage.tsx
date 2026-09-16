@@ -314,6 +314,17 @@ const LandingPage: React.FC = () => {
               </motion.div>
             ))}
           </div>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center text-sm text-slate-500 mt-12 max-w-3xl mx-auto"
+          >
+            Under the hood: documents are read in-browser (pdf.js, mammoth) and structured with
+            rule-based section detection — heuristic NLP, not a trained BERT model. Scoring and
+            verification run locally; the optional AI Insights narrative uses a local LLM.
+          </motion.p>
         </div>
       </section>
 
