@@ -32,6 +32,26 @@ export interface ExportData {
   jobTitle?: string;
   recommendation?: string;
   shortlistScore?: number;
+  trust?: {
+    score: number;
+    band: string;
+    label: string;
+    caveat: string;
+    factors: {
+      label: string;
+      value: number;
+      weight: number;
+      detail: string;
+    }[];
+  };
+  brief?: {
+    headline: string;
+    strengths: string[];
+    gaps: string[];
+    verificationAsks: string[];
+    interviewFocus: string[];
+    nextSteps: string[];
+  };
 }
 
 export function generatePDFReport(data: ExportData): void {
@@ -80,6 +100,16 @@ export function generatePDFReport(data: ExportData): void {
     .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px; }
     .verification-section { background: #fefce8; border: 1px solid #fde047; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
     .warning { color: #b45309; font-weight: 500; }
+    .page-break { page-break-before: always; }
+    .factor-row { margin-bottom: 12px; }
+    .factor-head { display: flex; justify-content: space-between; font-size: 13px; }
+    .factor-detail { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .factor-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+    .factor-bar > span { display: block; height: 100%; background: #10b981; }
+    .brief-block { margin-bottom: 16px; }
+    .brief-block h4 { font-size: 14px; margin-bottom: 6px; color: #0f172a; }
+    .brief-block ul { margin-left: 20px; }
+    .brief-block li { margin-bottom: 4px; }
     @media print { body { padding: 20px; } }
   </style>
 </head>
@@ -142,6 +172,51 @@ export function generatePDFReport(data: ExportData): void {
       ${data.verification.triggeredRules.length > 0 ? `
         <p style="margin-top: 10px;" class="warning">⚠️ ${data.verification.triggeredRules.length} verification rule(s) triggered</p>
       ` : ''}
+    </div>
+  </div>
+  ` : ''}
+
+  ${data.trust ? `
+  <div class="section">
+    <div class="section-title">Trust Score (plausibility &amp; consistency)</div>
+    <div class="score-card" style="text-align: left;">
+      <div class="score-value ${getScoreClass(data.trust.score)}" style="font-size: 40px;">${data.trust.score}<span style="font-size: 18px;">/100</span></div>
+      <div class="score-label" style="font-size: 14px; margin-bottom: 15px;">${data.trust.label}</div>
+      ${data.trust.factors.map(f => `
+        <div class="factor-row">
+          <div class="factor-head"><span>${f.label}</span><strong>${f.value}%</strong></div>
+          <div class="factor-bar"><span style="width: ${f.value}%;"></span></div>
+          <div class="factor-detail">${f.detail}</div>
+        </div>
+      `).join('')}
+      <div class="factor-detail" style="margin-top: 10px;">${data.trust.caveat}</div>
+    </div>
+  </div>
+  ` : ''}
+
+  ${data.brief ? `
+  <div class="section page-break">
+    <div class="section-title">Employer Brief</div>
+    <p style="font-weight: 600; margin-bottom: 15px;">${data.brief.headline}</p>
+    <div class="brief-block">
+      <h4>Strengths</h4>
+      <ul>${data.brief.strengths.map(s => `<li>${s}</li>`).join('')}</ul>
+    </div>
+    <div class="brief-block">
+      <h4>Gaps &amp; Questions</h4>
+      <ul>${data.brief.gaps.map(s => `<li>${s}</li>`).join('')}</ul>
+    </div>
+    <div class="brief-block">
+      <h4>Verify Before Advancing</h4>
+      <ul>${data.brief.verificationAsks.map(s => `<li>${s}</li>`).join('')}</ul>
+    </div>
+    <div class="brief-block">
+      <h4>Interview Focus</h4>
+      <ul>${data.brief.interviewFocus.map(s => `<li>${s}</li>`).join('')}</ul>
+    </div>
+    <div class="brief-block">
+      <h4>Suggested Next Steps</h4>
+      <ul>${data.brief.nextSteps.map(s => `<li>${s}</li>`).join('')}</ul>
     </div>
   </div>
   ` : ''}
@@ -234,7 +309,28 @@ export function generateTextReport(data: ExportData): string {
     }
     report += `\n`;
   }
-  
+
+  if (data.trust) {
+    report += `TRUST SCORE (plausibility & consistency)\n`;
+    report += `-`.repeat(30) + `\n`;
+    report += `${data.trust.score}/100 — ${data.trust.label}\n`;
+    data.trust.factors.forEach(f => {
+      report += `  ${f.label}: ${f.value}% (weight ${Math.round(f.weight * 100)}%) — ${f.detail}\n`;
+    });
+    report += `${data.trust.caveat}\n\n`;
+  }
+
+  if (data.brief) {
+    report += `EMPLOYER BRIEF\n`;
+    report += `-`.repeat(30) + `\n`;
+    report += `${data.brief.headline}\n\n`;
+    report += `Strengths:\n` + data.brief.strengths.map(s => `  - ${s}`).join('\n') + `\n\n`;
+    report += `Gaps:\n` + data.brief.gaps.map(s => `  - ${s}`).join('\n') + `\n\n`;
+    report += `Verify before advancing:\n` + data.brief.verificationAsks.map(s => `  - ${s}`).join('\n') + `\n\n`;
+    report += `Interview focus:\n` + data.brief.interviewFocus.map(s => `  - ${s}`).join('\n') + `\n\n`;
+    report += `Next steps:\n` + data.brief.nextSteps.map(s => `  - ${s}`).join('\n') + `\n\n`;
+  }
+
   report += `SCORE BREAKDOWN\n`;
   report += `-`.repeat(30) + `\n`;
   data.breakdown.forEach(item => {

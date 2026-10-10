@@ -28,6 +28,9 @@ import {
   ollamaSetupHint,
 } from '../utils/llm';
 import { computeShortlistScore } from '../utils/shortlist';
+import { computeTrustScore } from '../utils/trustScore';
+import { buildEmployerBrief } from '../utils/employerBrief';
+import { simulateSkills, skillsCandidateCouldAdd } from '../utils/skillSimulator';
 
 const CandidateDetailPage: React.FC = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
@@ -42,6 +45,7 @@ const CandidateDetailPage: React.FC = () => {
   const [showDecisionModal, setShowDecisionModal] = useState(false);
   const [narrative, setNarrative] = useState('');
   const [narrativeBusy, setNarrativeBusy] = useState(false);
+  const [simulatedSkills, setSimulatedSkills] = useState<string[]>([]);
   
   useEffect(() => {
     if (candidateId) {
@@ -74,6 +78,10 @@ const CandidateDetailPage: React.FC = () => {
   const resume = candidateId ? getParsedResume(candidateId) : null;
   const structuredSummary = candidate ? buildStructuredSummary(candidate, match, currentJob, resume) : '';
   const shortlist = candidate && match ? computeShortlistScore(candidate, match, shortlistWeights) : null;
+  const trust = computeTrustScore(resume, candidate, match);
+  const brief = buildEmployerBrief(candidate, match, resume, currentJob, shortlist?.score);
+  const skillOptions = skillsCandidateCouldAdd(currentJob, match);
+  const simulation = simulateSkills(match, currentJob, simulatedSkills);
 
   const handleExport = () => {
     if (!candidate || !match) return;
@@ -104,6 +112,21 @@ const CandidateDetailPage: React.FC = () => {
       jobTitle: currentJob ? `${currentJob.title} at ${currentJob.company}` : undefined,
       recommendation: match.recommendation,
       shortlistScore: shortlist?.score,
+      trust: {
+        score: trust.score,
+        band: trust.band,
+        label: trust.label,
+        caveat: trust.caveat,
+        factors: trust.factors,
+      },
+      brief: {
+        headline: brief.headline,
+        strengths: brief.strengths,
+        gaps: brief.gaps,
+        verificationAsks: brief.verificationAsks,
+        interviewFocus: brief.interviewFocus,
+        nextSteps: brief.nextSteps,
+      },
     };
     generatePDFReport(exportData);
     showToast('success', 'Report opened. Use the browser print dialog to save a PDF.');
@@ -235,13 +258,14 @@ const CandidateDetailPage: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
+          className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8"
         >
           {[
             { label: 'Resume Quality', score: candidate.overallScore, icon: FileText },
             { label: 'ATS Compatibility', score: candidate.atsScore, icon: Target },
             { label: 'Evidence Strength', score: candidate.evidenceScore, icon: Shield },
             { label: 'Job Fit', score: match.overallFit, icon: TrendingUp },
+            { label: 'Trust Score', score: trust.score, icon: CheckCircle },
             { label: 'Verification Risk', score: match.riskLevel === 'low' ? 90 : match.riskLevel === 'medium' ? 60 : 30, icon: AlertTriangle },
           ].map((item, i) => (
             <div key={i} className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
@@ -287,6 +311,155 @@ const CandidateDetailPage: React.FC = () => {
           <p className="text-slate-300 leading-relaxed">{narrative || structuredSummary}</p>
           {narrative && (
             <p className="text-xs text-slate-500 mt-3">Narrative from local Ollama. Facts still come from this candidate’s stored match record.</p>
+          )}
+        </motion.div>
+
+        {/* Employer Brief + Trust Score */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="lg:col-span-2 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6"
+          >
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-emerald-400" />
+              Employer Brief
+            </h3>
+            <p className="text-slate-200 font-medium mb-4">{brief.headline}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-emerald-300 mb-2">Strengths</h4>
+                <ul className="space-y-1">
+                  {brief.strengths.map((s, i) => (
+                    <li key={i} className="text-sm text-slate-300 flex gap-2"><span className="text-emerald-400">•</span>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-amber-300 mb-2">Gaps &amp; Questions</h4>
+                <ul className="space-y-1">
+                  {brief.gaps.map((s, i) => (
+                    <li key={i} className="text-sm text-slate-300 flex gap-2"><span className="text-amber-400">•</span>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-cyan-300 mb-2">Verify Before Advancing</h4>
+                <ul className="space-y-1">
+                  {brief.verificationAsks.map((s, i) => (
+                    <li key={i} className="text-sm text-slate-300 flex gap-2"><span className="text-cyan-400">•</span>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-purple-300 mb-2">Suggested Next Steps</h4>
+                <ul className="space-y-1">
+                  {brief.nextSteps.map((s, i) => (
+                    <li key={i} className="text-sm text-slate-300 flex gap-2"><span className="text-purple-400">•</span>{s}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6"
+          >
+            <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              Trust Score
+            </h3>
+            <div className="flex items-end gap-2 mb-4">
+              <span className={`text-4xl font-bold ${getScoreColor(trust.score)}`}>{trust.score}</span>
+              <span className="text-slate-400 mb-1">/100 · {trust.label}</span>
+            </div>
+            <div className="space-y-3">
+              {trust.factors.map((f, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-xs text-slate-300 mb-1">
+                    <span>{f.label}</span>
+                    <span>{f.value}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${getScoreBg(f.value)}`} style={{ width: `${f.value}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-4">{trust.caveat}</p>
+          </motion.div>
+        </div>
+
+        {/* Skill Impact Simulator */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6"
+        >
+          <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+            <Brain className="w-5 h-5 text-cyan-400" />
+            Industry Skill Simulator
+          </h3>
+          <p className="text-sm text-slate-400 mb-4">
+            Select the missing skills this candidate could realistically add, and see the projected impact on the score against {currentJob ? currentJob.title : 'the role'}.
+          </p>
+          {skillOptions.length === 0 ? (
+            <p className="text-sm text-slate-400">No addable job skills are on file — the candidate already covers the parsed requirements, or no job is selected.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {skillOptions.map(opt => {
+                  const active = simulatedSkills.includes(opt.skill);
+                  return (
+                    <button
+                      key={opt.skill}
+                      onClick={() => setSimulatedSkills(prev =>
+                        active ? prev.filter(s => s !== opt.skill) : [...prev, opt.skill])}
+                      className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                        active
+                          ? 'bg-cyan-600 border-cyan-500 text-white'
+                          : 'bg-slate-700/40 border-slate-600 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {opt.skill}
+                      {opt.required && <span className="ml-2 text-[10px] uppercase text-cyan-200">required</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-700/30 rounded-xl p-4">
+                  <p className="text-xs text-slate-400">Current fit</p>
+                  <p className="text-2xl font-bold text-white">{simulation.baseline.fit}%</p>
+                </div>
+                <div className="bg-slate-700/30 rounded-xl p-4">
+                  <p className="text-xs text-slate-400">Projected fit</p>
+                  <p className={`text-2xl font-bold ${getScoreColor(simulation.projected.fit)}`}>{simulation.projected.fit}%</p>
+                </div>
+                <div className="bg-slate-700/30 rounded-xl p-4">
+                  <p className="text-xs text-slate-400">Skill match</p>
+                  <p className="text-2xl font-bold text-white">
+                    {simulation.baseline.skillMatch}% <span className="text-slate-500 text-base">→</span> {simulation.projected.skillMatch}%
+                  </p>
+                </div>
+                <div className="bg-slate-700/30 rounded-xl p-4">
+                  <p className="text-xs text-slate-400">Projected change</p>
+                  <p className={`text-2xl font-bold ${simulation.delta.fit > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    {simulation.delta.fit > 0 ? '+' : ''}{simulation.delta.fit}
+                  </p>
+                </div>
+              </div>
+              {simulation.stillMissing.length > 0 && (
+                <p className="text-xs text-amber-300 mt-4">Still missing required skills: {simulation.stillMissing.join(', ')}.</p>
+              )}
+              <ul className="mt-3 space-y-1">
+                {simulation.notes.map((n, i) => (
+                  <li key={i} className="text-xs text-slate-500">• {n}</li>
+                ))}
+              </ul>
+            </>
           )}
         </motion.div>
 
