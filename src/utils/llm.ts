@@ -199,30 +199,79 @@ export interface ChatTurn {
   content: string;
 }
 
+export interface OllamaChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export async function ollamaChat(
+  messages: OllamaChatMessage[],
+  model: string = getPreferredModel(),
+  options: { temperature?: number; num_ctx?: number } = {},
+): Promise<string> {
+  const endpoint = getOllamaEndpoint();
+  const response = await fetch(`${endpoint}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      options: {
+        temperature: options.temperature ?? 0.3,
+        num_ctx: options.num_ctx ?? 4096,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama returned HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('Ollama returned an empty response');
+  }
+  return content.trim();
+}
+
+// Models sometimes restart the transcript ("Recruiter: ...", "Assistant: ...").
+// Trim any echoed role label or a spurious new turn so the user only sees the answer.
+export function sanitizeChatReply(raw: string): string {
+  let text = raw.trim();
+  text = text.replace(/^(Recruiter|Assistant|You|User|System)\s*:\s*/i, '');
+  const turnBreak = text.search(/\n+\s*(Recruiter|You|User)\s*:/i);
+  if (turnBreak >= 0) text = text.slice(0, turnBreak);
+  return text.trim();
+}
+
 export async function recruiterChatReply(
   question: string,
   history: ChatTurn[],
   contextBlock: string,
   model?: string,
 ): Promise<string> {
-  const prior = history
+  const prior: OllamaChatMessage[] = history
     .slice(-8)
-    .map(t => `${t.role === 'user' ? 'Recruiter' : 'Assistant'}: ${t.content}`)
-    .join('\n');
+    .filter((t, i, arr) => !(i === arr.length - 1 && t.role === 'user' && t.content.trim() === question.trim()))
+    .map(t => ({ role: t.role, content: t.content }));
 
-  const prompt = `You are ResumeGuard AI, a recruitment assistant. Answer only from the hiring context below.
-If the answer is not in the context, say you do not have that data. Never invent candidates or scores.
-Keep answers under 180 words. Be specific and cite the numbers that appear in the context.
+  const messages: OllamaChatMessage[] = [
+    {
+      role: 'system',
+      content:
+        'You are ResumeGuard AI, a recruitment assistant. Answer only from the hiring context below. ' +
+        'If the answer is not in the context, say you do not have that data. Never invent candidates or scores. ' +
+        'Keep answers under 180 words. Be specific and cite the numbers that appear in the context.\n\n' +
+        `HIRING CONTEXT:\n${contextBlock}`,
+    },
+    ...prior,
+    { role: 'user', content: question },
+  ];
 
-HIRING CONTEXT:
-${contextBlock}
-
-CONVERSATION:
-${prior || '(none)'}
-Recruiter: ${question}
-Assistant:`;
-
-  return ollamaGenerate(prompt, model, { temperature: 0.2, num_ctx: 4096 });
+  const raw = await ollamaChat(messages, model, { temperature: 0.2, num_ctx: 4096 });
+  return sanitizeChatReply(raw);
 }
 
 export interface InterviewScoreResult {

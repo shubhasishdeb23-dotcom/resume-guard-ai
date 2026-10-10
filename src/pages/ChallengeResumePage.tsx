@@ -23,11 +23,11 @@ import { generateChallengeReport } from '../utils/challengeReport';
 const ChallengeResumePage: React.FC = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
   const navigate = useNavigate();
-  const { getCandidate, getMatch } = useRecruiter();
+  const { getCandidate, getMatch, getParsedResume } = useRecruiter();
   
   const [candidate, setCandidate] = useState<any>(null);
   const [challenges, setChallenges] = useState<ChallengeReport | null>(null);
-  const [activeTab, setActiveTab] = useState<'strong' | 'weak' | 'technical' | 'behavioral'>('weak');
+  const [activeTab, setActiveTab] = useState<'strong' | 'weak' | 'technical' | 'behavioral' | 'credential'>('weak');
   
   useEffect(() => {
     if (!candidateId) return;
@@ -41,18 +41,22 @@ const ChallengeResumePage: React.FC = () => {
     
     if (demoCandidate) {
       setCandidate(demoCandidate);
-      setChallenges(demoCandidate.challenges);
+      const credentialQuestions = demoCandidate.challenges.credentialQuestions?.length
+        ? demoCandidate.challenges.credentialQuestions
+        : generateChallengeReport(demoCandidate.match, demoCandidate.profile, demoCandidate.resume).credentialQuestions;
+      setChallenges({ ...demoCandidate.challenges, credentialQuestions });
       return;
     }
     
     const profile = getCandidate(candidateId);
     const match = getMatch(candidateId);
+    const resume = getParsedResume(candidateId);
     if (profile && match) {
-      const generated = generateChallengeReport(match, profile);
+      const generated = generateChallengeReport(match, profile, resume);
       setCandidate({ ...profile, profile, match, challenges: generated, resume: null });
       setChallenges(generated);
     }
-  }, [candidateId, getCandidate, getMatch]);
+  }, [candidateId, getCandidate, getMatch, getParsedResume]);
   
   if (!candidate || !challenges) {
     return (
@@ -144,6 +148,7 @@ const ChallengeResumePage: React.FC = () => {
             { id: 'weak', label: 'Weak Claims', icon: AlertTriangle, count: challenges.topWeakClaims.length },
             { id: 'technical', label: 'Technical Questions', icon: Brain, count: challenges.technicalQuestions.length },
             { id: 'behavioral', label: 'Behavioral Questions', icon: MessageSquare, count: challenges.behavioralQuestions.length },
+            { id: 'credential', label: 'Credentials & Degrees', icon: FileText, count: (challenges.credentialQuestions || []).length },
             { id: 'strong', label: 'Strong Evidence', icon: CheckCircle, count: challenges.topStrongClaims.length },
           ].map((tab) => (
             <button
@@ -299,6 +304,61 @@ const ChallengeResumePage: React.FC = () => {
                   <p className="text-slate-400">No behavioral questions needed</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Credentials & Degrees */}
+          {activeTab === 'credential' && (
+            <div className="space-y-4">
+              {(challenges.credentialQuestions || []).length > 0 ? (
+                (challenges.credentialQuestions || []).map((question, i) => (
+                  <motion.div
+                    key={question.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-sky-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-sky-400" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            question.priority === 'high' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {question.priority.toUpperCase()} PRIORITY
+                          </span>
+                        </div>
+                        <h4 className="font-medium text-white mb-2">{question.question}</h4>
+                        <p className="text-xs text-slate-500 mb-3">
+                          Based on claim: "{question.claim}"
+                        </p>
+                        <p className="text-xs text-sky-300 mb-2">{question.reason}</p>
+                        {question.followUp.length > 0 && (
+                          <div className="p-3 bg-slate-700/30 rounded-xl">
+                            <p className="text-xs text-slate-400 mb-1">Follow-up questions:</p>
+                            <ul className="text-sm text-slate-300 space-y-1">
+                              {question.followUp.map((fu, j) => (
+                                <li key={j}>• {fu}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-12 bg-slate-800/30 rounded-2xl">
+                  <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+                  <p className="text-slate-400">No degree or certification questions — none were parsed from this resume.</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                These questions probe credential claims for consistency and detail. They are not an automated fraud or degree check.
+              </p>
             </div>
           )}
 

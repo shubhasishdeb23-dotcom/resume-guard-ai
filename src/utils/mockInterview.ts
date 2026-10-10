@@ -1,3 +1,4 @@
+import { ParsedResume } from '../types';
 import { CandidateMatch, CandidateProfile, InterviewQuestion } from '../types/recruiter';
 import { generateChallengeReport } from './challengeReport';
 
@@ -21,19 +22,28 @@ export interface InterviewSession {
   completedAt?: string;
 }
 
-export function buildInterviewQuestions(match: CandidateMatch, candidate: CandidateProfile): InterviewQuestion[] {
-  const report = generateChallengeReport(match, candidate);
+export function buildInterviewQuestions(
+  match: CandidateMatch,
+  candidate: CandidateProfile,
+  resume?: ParsedResume | null,
+): InterviewQuestion[] {
+  const report = generateChallengeReport(match, candidate, resume);
   const merged = [
+    ...(report.credentialQuestions || []),
     ...report.technicalQuestions,
     ...report.behavioralQuestions,
   ];
   const seen = new Set<string>();
-  return merged.filter(q => {
-    const key = q.question.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 8);
+  const priorityRank: Record<InterviewQuestion['priority'], number> = { high: 0, medium: 1, low: 2 };
+  return merged
+    .filter(q => {
+      const key = q.question.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])
+    .slice(0, 8);
 }
 
 function tokenize(text: string): string[] {
@@ -87,4 +97,47 @@ export function scoreInterviewAnswerHeuristic(question: InterviewQuestion, answe
 export function interviewAverage(session: InterviewSession): number | null {
   if (session.answers.length === 0) return null;
   return Math.round(session.answers.reduce((sum, a) => sum + a.score, 0) / session.answers.length);
+}
+
+export interface InterviewConfidence {
+  level: 'strong' | 'mixed' | 'weak';
+  label: string;
+  rationale: string;
+}
+
+// A transparent read on how well the candidate substantiated their claims under
+// questioning. This is a consistency signal, NOT a fraud or credential check.
+export function interviewConfidence(session: InterviewSession): InterviewConfidence | null {
+  if (session.answers.length === 0) return null;
+
+  const avg = interviewAverage(session) ?? 0;
+  const weakAnswers = session.answers.filter(a => a.score < 25).length;
+  const verificationAnswers = session.answers.filter(a => {
+    const q = session.questions.find(x => x.id === a.questionId);
+    return q?.category === 'credential' || q?.category === 'verification';
+  });
+  const verificationAvg = verificationAnswers.length
+    ? Math.round(verificationAnswers.reduce((s, a) => s + a.score, 0) / verificationAnswers.length)
+    : null;
+
+  let level: InterviewConfidence['level'] = 'mixed';
+  if (avg >= 65 && weakAnswers === 0 && (verificationAvg === null || verificationAvg >= 55)) {
+    level = 'strong';
+  } else if (avg < 40 || weakAnswers >= 2 || (verificationAvg !== null && verificationAvg < 35)) {
+    level = 'weak';
+  }
+
+  const label = level === 'strong'
+    ? 'Strong confidence — claimed skills and credentials backed by consistent, specific detail'
+    : level === 'weak'
+      ? 'Weak confidence — claims were vague, evasive, or inconsistent under questioning'
+      : 'Mixed confidence — some claims are well supported, others need follow-up';
+
+  const rationale =
+    `Average ${avg}% across ${session.answers.length} answer(s)` +
+    (verificationAvg !== null ? `, ${verificationAvg}% on credential/verification questions` : '') +
+    (weakAnswers ? `, ${weakAnswers} weak answer(s)` : '') +
+    '. This reflects answer consistency and specificity only — it is not a fraud or credential-verification determination.';
+
+  return { level, label, rationale };
 }

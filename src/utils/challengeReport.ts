@@ -1,6 +1,17 @@
+import { ParsedResume } from '../types';
 import { CandidateMatch, CandidateProfile, ChallengeReport, InterviewQuestion } from '../types/recruiter';
 
-export function generateChallengeReport(match: CandidateMatch, candidate: CandidateProfile): ChallengeReport {
+function yearOf(date?: string | null): number | null {
+  if (!date) return null;
+  const match = String(date).match(/(\d{4})/);
+  return match ? Number(match[1]) : null;
+}
+
+export function generateChallengeReport(
+  match: CandidateMatch,
+  candidate: CandidateProfile,
+  resume?: ParsedResume | null,
+): ChallengeReport {
   const topStrongClaims: { claim: string; evidence: string }[] = [];
 
   match.skillMatch.matched.slice(0, 3).forEach((skill) => {
@@ -80,6 +91,75 @@ export function generateChallengeReport(match: CandidateMatch, candidate: Candid
     possibleContradictions.push('High-risk signals detected in experience timeline or claims');
   }
 
+  const credentialQuestions: InterviewQuestion[] = [];
+  const education = resume?.education || [];
+  const certifications = resume?.certifications || [];
+
+  education.slice(0, 2).forEach((edu, i) => {
+    const years = [edu.startDate, edu.endDate].filter(Boolean).join('–');
+    const label = `${edu.degree}${edu.field ? ` in ${edu.field}` : ''}${edu.institution ? ` — ${edu.institution}` : ''}`.trim();
+    credentialQuestions.push({
+      id: `ciq_edu_${candidate.id}_${i}`,
+      category: 'credential',
+      claim: `Education: ${label || 'degree on file'}`,
+      question: `Your resume lists ${label || 'a degree'}${years ? ` (${years})` : ''}. Walk us through the coursework, thesis or capstone most relevant to this role, and what credential documentation you can provide.`,
+      followUp: ['Which institution and graduation year should we verify?', 'What did you personally produce for your final project?'],
+      priority: 'medium',
+      reason: 'A degree cannot be verified from the resume text alone — confirm institution, dates and specifics.',
+    });
+  });
+
+  certifications.slice(0, 2).forEach((cert, i) => {
+    const name = cert.name || 'a certification';
+    const issuer = cert.issuer ? ` issued by ${cert.issuer}` : '';
+    const when = cert.date ? ` (${cert.date})` : '';
+    credentialQuestions.push({
+      id: `ciq_cert_${candidate.id}_${i}`,
+      category: 'credential',
+      claim: `Certification: ${name}${issuer}`,
+      question: `You list ${name}${issuer}${when}. ${cert.credentialId ? `The credential ID on file is ${cert.credentialId}. ` : ''}How did you apply it on the job, and how could we confirm it with the issuing body?`,
+      followUp: ['What is the credential ID or registry we could check?', 'How did it change how you work?'],
+      priority: 'medium',
+      reason: 'Certifications should be confirmed with the issuing body.',
+    });
+  });
+
+  const jobs = resume?.experience || [];
+  const eduEndYears = education.map(e => yearOf(e.endDate)).filter((y): y is number => y !== null);
+  const jobStartYears = jobs.map(j => yearOf(j.startDate)).filter((y): y is number => y !== null);
+  const earliestJob = jobStartYears.length ? Math.min(...jobStartYears) : null;
+  const latestEduEnd = eduEndYears.length ? Math.max(...eduEndYears) : null;
+
+  if (earliestJob !== null && latestEduEnd !== null && latestEduEnd > earliestJob + 1) {
+    possibleContradictions.push(`Education end (${latestEduEnd}) is after the first job start (${earliestJob})`);
+    credentialQuestions.push({
+      id: `ciq_timeline_${candidate.id}`,
+      category: 'credential',
+      claim: 'Timeline: education vs work',
+      question: `Your education appears to end around ${latestEduEnd}, but your work history starts around ${earliestJob}. Can you walk us through the overlap — were you studying and working at the same time?`,
+      followUp: ['Were these full-time roles?', 'Is there anything about the sequence we should understand?'],
+      priority: 'medium',
+      reason: 'Overlapping education and employment can be legitimate (part-time study) but should be clarified.',
+    });
+  }
+
+  const currentYear = new Date().getFullYear();
+  if (earliestJob !== null && candidate.yearsExperience > 0) {
+    const span = currentYear - earliestJob;
+    if (Math.abs(span - candidate.yearsExperience) > 2) {
+      possibleContradictions.push(`Reported ${candidate.yearsExperience} years does not match the work-history span (~${span} years)`);
+      credentialQuestions.push({
+        id: `ciq_exp_${candidate.id}`,
+        category: 'credential',
+        claim: `${candidate.yearsExperience} years of experience`,
+        question: `Your resume reports about ${candidate.yearsExperience} years of experience, but the dated roles span roughly ${span} years. Help us reconcile the timeline and any career gaps.`,
+        followUp: ['Were there overlapping or contract roles?', 'Any periods out of the workforce we should know about?'],
+        priority: 'high',
+        reason: 'Reported experience does not align with the employment timeline.',
+      });
+    }
+  }
+
   const behavioralQuestions: InterviewQuestion[] = [
     {
       id: `biq_exp_${candidate.id}`,
@@ -122,6 +202,7 @@ export function generateChallengeReport(match: CandidateMatch, candidate: Candid
     topWeakClaims: topWeakClaims.slice(0, 5),
     technicalQuestions: technicalQuestions.slice(0, 5),
     behavioralQuestions: behavioralQuestions.slice(0, 4),
+    credentialQuestions: credentialQuestions.slice(0, 4),
     weakestEvidenceAreas: holes.slice(0, 5),
     possibleContradictions,
   };

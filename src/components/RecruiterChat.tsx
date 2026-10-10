@@ -79,6 +79,7 @@ const RecruiterChat: React.FC = () => {
     const question = input.trim();
     if (!question || busy) return;
     setInput('');
+    const history = messages;
     const nextHistory = [...messages, { role: 'user' as const, content: question }];
     setMessages(nextHistory);
     setBusy(true);
@@ -86,7 +87,7 @@ const RecruiterChat: React.FC = () => {
     const local = answerFromLocalData(question, ctx);
     try {
       if (useOllama && ollamaReady) {
-        const reply = await recruiterChatReply(question, nextHistory, buildPoolContextBlock(ctx), model);
+        const reply = await recruiterChatReply(question, history, buildPoolContextBlock(ctx), model);
         setMessages([...nextHistory, { role: 'assistant', content: reply }]);
       } else {
         setMessages([...nextHistory, { role: 'assistant', content: local }]);

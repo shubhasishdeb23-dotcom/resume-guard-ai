@@ -17,6 +17,7 @@ import {
 import {
   buildInterviewQuestions,
   interviewAverage,
+  interviewConfidence,
   InterviewSession,
   scoreInterviewAnswerHeuristic,
 } from '../utils/mockInterview';
@@ -62,7 +63,7 @@ const MockInterviewPage: React.FC = () => {
       candidateId,
       candidateName: candidate.name,
       jobTitle: currentJob?.title || 'Open role',
-      questions: buildInterviewQuestions(match, candidate),
+      questions: buildInterviewQuestions(match, candidate, resume),
       answers: [],
       currentIndex: 0,
       startedAt: new Date().toISOString(),
@@ -77,6 +78,7 @@ const MockInterviewPage: React.FC = () => {
 
   const question = session?.questions[session.currentIndex];
   const average = session ? interviewAverage(session) : null;
+  const confidence = session ? interviewConfidence(session) : null;
   const done = Boolean(session && session.currentIndex >= session.questions.length);
 
   const contextBlock = useMemo(() => {
@@ -218,6 +220,21 @@ const MockInterviewPage: React.FC = () => {
               Average score {average ?? 0}% across {session.answers.length} answers.
               This is practice scoring for recruiters, not a hiring decision.
             </p>
+            {confidence && (
+              <div className={`mt-4 rounded-xl border p-4 ${
+                confidence.level === 'strong'
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : confidence.level === 'weak'
+                    ? 'bg-red-500/10 border-red-500/30'
+                    : 'bg-amber-500/10 border-amber-500/30'
+              }`}>
+                <p className="font-semibold text-white flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  Claim confidence: {confidence.label}
+                </p>
+                <p className="text-sm text-slate-300 mt-1">{confidence.rationale}</p>
+              </div>
+            )}
           </div>
         )}
 

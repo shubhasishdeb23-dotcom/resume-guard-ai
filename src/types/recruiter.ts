@@ -125,7 +125,7 @@ export interface ComparisonMatrix {
 
 export interface InterviewQuestion {
   id: string;
-  category: 'technical' | 'behavioral' | 'verification' | 'experience';
+  category: 'technical' | 'behavioral' | 'verification' | 'experience' | 'credential';
   claim: string;
   question: string;
   followUp: string[];
@@ -138,6 +138,7 @@ export interface ChallengeReport {
   topWeakClaims: { claim: string; missing: string }[];
   technicalQuestions: InterviewQuestion[];
   behavioralQuestions: InterviewQuestion[];
+  credentialQuestions?: InterviewQuestion[];
   weakestEvidenceAreas: string[];
   possibleContradictions: string[];
 }

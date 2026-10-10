@@ -32,6 +32,13 @@ import { computeTrustScore } from '../utils/trustScore';
 import { buildEmployerBrief } from '../utils/employerBrief';
 import { simulateSkills, skillsCandidateCouldAdd } from '../utils/skillSimulator';
 
+const RECOMMENDATION_LABEL: Record<string, { text: string; className: string }> = {
+  strong_match: { text: 'Strong match — recommend advancing to interview', className: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200' },
+  potential_match: { text: 'Potential match — interview with focused verification', className: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-200' },
+  needs_verification: { text: 'Hold — verify key claims before advancing', className: 'bg-amber-500/15 border-amber-500/30 text-amber-200' },
+  weak_match: { text: 'Weak match — likely not a fit for this role', className: 'bg-red-500/15 border-red-500/30 text-red-200' },
+};
+
 const CandidateDetailPage: React.FC = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
   const navigate = useNavigate();
@@ -46,6 +53,7 @@ const CandidateDetailPage: React.FC = () => {
   const [narrative, setNarrative] = useState('');
   const [narrativeBusy, setNarrativeBusy] = useState(false);
   const [simulatedSkills, setSimulatedSkills] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('detailed');
   
   useEffect(() => {
     if (candidateId) {
@@ -83,7 +91,7 @@ const CandidateDetailPage: React.FC = () => {
   const skillOptions = skillsCandidateCouldAdd(currentJob, match);
   const simulation = simulateSkills(match, currentJob, simulatedSkills);
 
-  const handleExport = () => {
+  const handleExport = (simpleOnly = false) => {
     if (!candidate || !match) return;
     const exportData: ExportData = {
       candidateName: candidate.name,
@@ -127,9 +135,12 @@ const CandidateDetailPage: React.FC = () => {
         interviewFocus: brief.interviewFocus,
         nextSteps: brief.nextSteps,
       },
+      simpleOnly,
     };
     generatePDFReport(exportData);
-    showToast('success', 'Report opened. Use the browser print dialog to save a PDF.');
+    showToast('success', simpleOnly
+      ? 'Employer summary opened. Use the browser print dialog to save a one-pager PDF.'
+      : 'Report opened. Use the browser print dialog to save a PDF.');
   };
 
   const handleNarrative = async () => {
@@ -175,6 +186,21 @@ const CandidateDetailPage: React.FC = () => {
             </button>
             
             <div className="flex items-center gap-3">
+              <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl p-1" role="tablist" aria-label="View mode">
+                {(['simple', 'detailed'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    role="tab"
+                    aria-selected={viewMode === mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors capitalize ${
+                      viewMode === mode ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={() => candidate && toggleShortlist(candidate.id)}
                 className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors"
@@ -196,7 +222,14 @@ const CandidateDetailPage: React.FC = () => {
                 Challenge This Resume
               </button>
               <button
-                onClick={handleExport}
+                onClick={() => handleExport(true)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Employer one-pager
+              </button>
+              <button
+                onClick={() => handleExport()}
                 className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors"
               >
                 <Download className="w-4 h-4" />
@@ -253,7 +286,8 @@ const CandidateDetailPage: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Score Cards */}
+        {/* Score Cards (detailed mode only) */}
+        {viewMode === 'detailed' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -287,6 +321,37 @@ const CandidateDetailPage: React.FC = () => {
             </div>
           ))}
         </motion.div>
+        )}
+
+        {/* Simple mode: hiring recommendation banner */}
+        {viewMode === 'simple' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-8 rounded-2xl p-6 border ${RECOMMENDATION_LABEL[match.recommendation]?.className || 'bg-slate-800/50 border-slate-700/50 text-slate-200'}`}
+          >
+            <h3 className="text-lg font-semibold mb-2">Hiring recommendation</h3>
+            <p className="font-medium mb-4">{RECOMMENDATION_LABEL[match.recommendation]?.text || match.recommendationReason}</p>
+            <div className="flex flex-wrap gap-6">
+              <div>
+                <p className="text-2xl font-bold text-white">{match.overallFit}%</p>
+                <p className="text-xs text-slate-300">Job fit</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{candidate.evidenceScore}%</p>
+                <p className="text-xs text-slate-300">Evidence</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{trust.score}/100</p>
+                <p className="text-xs text-slate-300">Trust</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white capitalize">{match.riskLevel}</p>
+                <p className="text-xs text-slate-300">Risk level</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -392,7 +457,8 @@ const CandidateDetailPage: React.FC = () => {
           </motion.div>
         </div>
 
-        {/* Skill Impact Simulator */}
+        {/* Skill Impact Simulator (detailed mode only) */}
+        {viewMode === 'detailed' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -462,8 +528,10 @@ const CandidateDetailPage: React.FC = () => {
             </>
           )}
         </motion.div>
+        )}
 
-        {/* Key Insight */}
+        {/* Key Insight (detailed mode only) */}
+        {viewMode === 'detailed' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -498,8 +566,10 @@ const CandidateDetailPage: React.FC = () => {
             </div>
           </div>
         </motion.div>
+        )}
 
-        {/* Two Column Layout */}
+        {/* Two Column Layout (detailed mode only) */}
+        {viewMode === 'detailed' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Skill Match */}
           <motion.div
@@ -591,9 +661,10 @@ const CandidateDetailPage: React.FC = () => {
             </div>
           </motion.div>
         </div>
+        )}
 
-        {/* Verification Findings */}
-        {match.recommendedVerification.length > 0 && (
+        {/* Verification Findings (detailed mode only) */}
+        {viewMode === 'detailed' && match.recommendedVerification.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
