@@ -45,10 +45,10 @@ const LandingPage: React.FC = () => {
   ];
 
   const stats = [
-    { value: '50K+', label: 'Resumes Analyzed' },
-    { value: '98%', label: 'ATS Detection Accuracy' },
-    { value: '2.5M+', label: 'Skills Extracted' },
-    { value: '15K+', label: 'Active Users' },
+    { value: 'Local-first', label: 'Parsing runs in your browser' },
+    { value: 'Evidence', label: 'Scores tied to resume claims' },
+    { value: 'Job match', label: 'Skills vs real requirements' },
+    { value: 'Ollama', label: 'Optional local LLM, honest fallback' },
   ];
 
   const differentiators = [
@@ -295,8 +295,8 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { step: '01', title: 'Upload Resume', desc: 'Upload PDF, DOCX, or TXT. Our parser extracts all structured information.' },
-              { step: '02', title: 'AI Analysis', desc: 'Our engine analyzes skills, evidence, consistency, and credibility.' },
-              { step: '03', title: 'Get Insights', desc: 'Review detailed scores, evidence, and actionable recommendations.' },
+              { step: '02', title: 'Analyze & verify', desc: 'Score skills, evidence, ATS fit, and claims that still need checking.' },
+              { step: '03', title: 'Hire with a trail', desc: 'Match to a job, shortlist with visible weights, mock-interview, chat, and export a PDF.' },
             ].map((item, index) => (
               <motion.div
                 key={index}

@@ -1,21 +1,15 @@
 import { JobDescription } from '../types/recruiter';
+import { ALL_SKILLS, CERTIFICATION_KEYWORDS } from '../data/skillTaxonomy';
 
 export function parseJobDescription(text: string): JobDescription['extracted'] {
   const textLower = text.toLowerCase();
   
-  const techSkills = [
-    'python', 'javascript', 'typescript', 'java', 'c++', 'go', 'rust', 'ruby',
-    'react', 'vue', 'angular', 'node.js', 'django', 'flask', 'spring',
-    'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'keras',
-    'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'jenkins',
-    'sql', 'mongodb', 'postgresql', 'redis', 'elasticsearch',
-    'git', 'agile', 'scrum', 'ci/cd', 'rest api', 'graphql',
-  ];
+  const skillKeywords = ALL_SKILLS;
   
-  const foundTech: string[] = [];
-  techSkills.forEach(skill => {
+  const foundSkills: string[] = [];
+  skillKeywords.forEach(skill => {
     if (textLower.includes(skill)) {
-      foundTech.push(skill);
+      foundSkills.push(skill);
     }
   });
   
@@ -23,12 +17,15 @@ export function parseJobDescription(text: string): JobDescription['extracted'] {
   const yearsRequired = experienceMatch ? parseInt(experienceMatch[1]) : 2;
   
   let experienceLevel: 'entry' | 'mid' | 'senior' | 'executive' = 'mid';
-  if (textLower.includes('senior') || textLower.includes('lead') || yearsRequired >= 5) {
-    experienceLevel = 'senior';
-  } else if (textLower.includes('entry') || textLower.includes('junior') || yearsRequired <= 1) {
-    experienceLevel = 'entry';
-  } else if (textLower.includes('executive') || textLower.includes('director')) {
+  if (textLower.includes('executive') || textLower.includes('director')) {
     experienceLevel = 'executive';
+  } else if (textLower.includes('senior') || textLower.includes('lead') || yearsRequired >= 5) {
+    experienceLevel = 'senior';
+  } else if (
+    textLower.includes('entry') || textLower.includes('junior') || yearsRequired <= 1 ||
+    /\b(apprentice|trainee|intern|graduate scheme|no experience|recent graduates?)\b/i.test(textLower)
+  ) {
+    experienceLevel = 'entry';
   }
   
   const degreePatterns = [
@@ -45,26 +42,22 @@ export function parseJobDescription(text: string): JobDescription['extracted'] {
       const match = text.match(pattern);
       education.push({
         degree: level,
-        field: match?.[1] || 'Computer Science',
+        field: match?.[1] || '',
         required: textLower.includes('required') || textLower.includes('must have'),
       });
     }
   });
   
-  if (education.length === 0 && (textLower.includes('cs') || textLower.includes('computer science'))) {
+  if (education.length === 0 && (textLower.includes('degree') || textLower.includes('diploma') || textLower.includes('bachelor') || textLower.includes('graduate'))) {
     education.push({
       degree: 'bachelor',
-      field: 'Computer Science',
-      required: false,
+      field: '',
+      required: textLower.includes('required') || textLower.includes('must have'),
     });
   }
   
-  const certPatterns = [
-    'aws certified', 'azure certified', 'gcp certified', 'google certified',
-    'pmp', 'scrum master', 'csm', 'psm', 'kubernetes certified',
-  ];
   const certifications: string[] = [];
-  certPatterns.forEach(cert => {
+  CERTIFICATION_KEYWORDS.forEach(cert => {
     if (textLower.includes(cert)) {
       certifications.push(cert);
     }
@@ -111,7 +104,7 @@ export function parseJobDescription(text: string): JobDescription['extracted'] {
     }
     
     const skillLine = line.replace(/^[•\-*]\s*/, '');
-    techSkills.forEach(skill => {
+    skillKeywords.forEach(skill => {
       if (skillLine.toLowerCase().includes(skill)) {
         if (inPreferred) {
           if (!preferredSkills.includes(skill)) preferredSkills.push(skill);
@@ -123,14 +116,17 @@ export function parseJobDescription(text: string): JobDescription['extracted'] {
   });
   
   if (requiredSkills.length === 0) {
-    foundTech.slice(0, 5).forEach(skill => {
+    foundSkills.slice(0, 5).forEach(skill => {
       if (!requiredSkills.includes(skill)) requiredSkills.push(skill);
     });
   }
   
   const domainKeywords = [
-    'fintech', 'healthcare', 'e-commerce', 'saas', 'enterprise',
-    'startup', 'b2b', 'b2c', 'real-time', 'distributed systems',
+    'fintech', 'healthcare', 'e-commerce', 'saas', 'enterprise', 'startup', 'b2b', 'b2c',
+    'hospital', 'clinic', 'nursing', 'education', 'school', 'university', 'legal', 'law firm',
+    'banking', 'finance', 'accounting', 'retail', 'hospitality', 'logistics', 'construction',
+    'manufacturing', 'government', 'nonprofit', 'insurance', 'real estate', 'pharma', 'biotech',
+    'automotive', 'agriculture', 'security', 'transport', 'telecom',
   ];
   const domainRequirements: string[] = [];
   domainKeywords.forEach(domain => {
@@ -142,7 +138,7 @@ export function parseJobDescription(text: string): JobDescription['extracted'] {
   return {
     requiredSkills: [...new Set(requiredSkills)],
     preferredSkills: [...new Set(preferredSkills)],
-    technologies: [...new Set(foundTech)],
+    technologies: [...new Set(foundSkills)],
     experience: {
       years: yearsRequired,
       level: experienceLevel,

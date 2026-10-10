@@ -153,9 +153,9 @@ function findEvidenceForClaim(claimText: string, resume: ParsedResume, context: 
           id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
           type: 'project',
           source: proj.name,
-          description: `Technology ${tech} used in project`,
+          description: `Skill/tool ${tech} used in project`,
           strength: 'medium',
-          url: proj.github,
+          url: proj.github || proj.demo,
         });
       }
     });
@@ -168,7 +168,7 @@ function findEvidenceForClaim(claimText: string, resume: ParsedResume, context: 
           id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
           type: 'experience',
           source: context.company || context.role,
-          description: `Technology ${tech} used in this role`,
+          description: `Skill/tool ${tech} used in this role`,
           strength: 'strong',
         });
       }
@@ -181,14 +181,15 @@ function findEvidenceForClaim(claimText: string, resume: ParsedResume, context: 
 function findProjectEvidence(project: any): EvidenceItem[] {
   const evidence: EvidenceItem[] = [];
   
-  if (project.github) {
+  const publicLink = project.github || project.demo;
+  if (publicLink) {
     evidence.push({
-      id: `ev_${Date.now()}_gh`,
+      id: `ev_${Date.now()}_link`,
       type: 'external',
-      source: 'GitHub',
-      description: 'GitHub repository available',
+      source: 'Public link',
+      description: 'Public portfolio, repository or demo available',
       strength: 'strong',
-      url: project.github,
+      url: publicLink,
     });
   }
   
@@ -197,7 +198,7 @@ function findProjectEvidence(project: any): EvidenceItem[] {
       id: `ev_${Date.now()}_tech`,
       type: 'project',
       source: project.name,
-      description: `${project.technologies.length} technologies listed`,
+      description: `${project.technologies.length} skills/tools listed`,
       strength: 'medium',
     });
   }
@@ -242,7 +243,7 @@ function identifyMissingEvidence(claim: Claim): string[] {
   const missing: string[] = [];
   const claimLower = claim.claim.toLowerCase();
   
-  if (/\d+%|\d+\s*(users|customers|clients|people|engineers|team)/i.test(claim.claim)) {
+  if (/\d+%|\d[\d,]*\+?\s*(?:users?|customers?|clients?|patients?|students?|people|employees?|staff|members?|team|engineers?|nurses?|hours?|days?|weeks?|months?|years?|revenue|sales|units?|tickets?|cases?|accounts?|orders?|transactions?|visits?|events?)/i.test(claim.claim)) {
     if (!claim.evidenceFound.some(e => e.type === 'achievement' && e.description.includes('quantified'))) {
       missing.push('Quantified metric lacks supporting project context');
     }
@@ -279,7 +280,7 @@ function generateVerificationQuestions(claim: Claim): string[] {
   }
   
   if (/built|developed|created/i.test(claim.claim) && !claim.evidenceFound.some(e => e.url)) {
-    questions.push('Is there a GitHub repository or demo available?');
+    questions.push('Is there a public work sample (repository, portfolio, case study or publication) available?');
   }
   
   return questions;
@@ -524,7 +525,7 @@ function analyzeProjectCredibility(resume: ParsedResume): ProjectCredibility[] {
       hasDeployment: !!proj.deployment,
       hasUsers: !!proj.users,
       hasMetrics: proj.metrics.length > 0,
-      hasGitHub: !!proj.github,
+      hasGitHub: !!(proj.github || proj.demo),
       hasDemo: !!proj.demo,
     };
     
@@ -534,9 +535,9 @@ function analyzeProjectCredibility(resume: ParsedResume): ProjectCredibility[] {
     
     const flags: string[] = [];
     if (!checks.hasProblem) flags.push('Missing problem statement');
-    if (!checks.hasTechnology) flags.push('No technologies listed');
+    if (!checks.hasTechnology) flags.push('No skills or tools listed');
     if (!checks.hasMetrics) flags.push('No quantified outcomes');
-    if (!checks.hasGitHub && proj.depthScore > 70) flags.push('High depth score but no GitHub link');
+    if (!checks.hasGitHub && proj.depthScore > 70) flags.push('High depth score but no public work sample link');
     
     let status: VerificationStatus = 'unverified';
     if (credibilityScore >= 70) status = 'supported';
@@ -706,8 +707,8 @@ function runRuleEngine(
     },
     {
       id: 'RULE-007',
-      name: 'Keyword-Only Technology',
-      description: 'Technology appears only as keyword without usage context',
+      name: 'Keyword-Only Skill',
+      description: 'Skill appears only as a keyword without usage context',
       severity: 'medium',
       triggered: resume.skills.some(s => 
         (s.category === 'Programming Languages' || 

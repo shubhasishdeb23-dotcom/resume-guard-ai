@@ -116,23 +116,29 @@ const UploadPage: React.FC = () => {
     }, 1000);
   }, [uploadResume, navigate]);
 
-  const loadSampleFile = useCallback(async (kind: 'pdf' | 'docx' | 'txt') => {
+  const loadSampleFile = useCallback(async (kind: string) => {
     if (kind === 'txt') {
       handleFile(new File([SAMPLE_RESUME], 'sample_resume.txt', { type: 'text/plain' }));
       return;
     }
 
-    const name = kind === 'pdf' ? 'Alex_Carter_Resume.pdf' : 'Alex_Carter_Resume.docx';
-    const type = kind === 'pdf'
-      ? 'application/pdf'
-      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const files: Record<string, { name: string; type: string }> = {
+      pdf: { name: 'Alex_Carter_Resume.pdf', type: 'application/pdf' },
+      docx: { name: 'Alex_Carter_Resume.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      'nurse-txt': { name: 'Maria_Gonzalez_RN_Resume.txt', type: 'text/plain' },
+      'nurse-pdf': { name: 'Maria_Gonzalez_RN_Resume.pdf', type: 'application/pdf' },
+      'teacher-txt': { name: 'David_Okafor_Teacher_Resume.txt', type: 'text/plain' },
+      'teacher-pdf': { name: 'David_Okafor_Teacher_Resume.pdf', type: 'application/pdf' },
+    };
+    const file = files[kind];
+    if (!file) return;
 
     try {
       setLoadingSample(kind);
-      const response = await fetch(`${import.meta.env.BASE_URL}samples/${name}`);
+      const response = await fetch(`${import.meta.env.BASE_URL}samples/${file.name}`);
       if (!response.ok) throw new Error(`Sample fetch failed: HTTP ${response.status}`);
       const blob = await response.blob();
-      await handleFile(new File([blob], name, { type }));
+      await handleFile(new File([blob], file.name, { type: file.type }));
     } catch (error) {
       console.error('Failed to load sample file:', error);
       alert('Could not load the sample file. Please upload your own resume instead.');
@@ -330,12 +336,16 @@ const UploadPage: React.FC = () => {
         {/* Sample Resumes */}
         {!selectedFile && (
           <div className="text-center mt-6">
-            <p className="text-slate-400 text-sm mb-3">No resume handy? Try a sample file:</p>
+            <p className="text-slate-400 text-sm mb-3">No resume handy? Try a sample (tech, healthcare or teaching):</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               {([
-                { kind: 'pdf' as const, label: 'Sample PDF' },
-                { kind: 'docx' as const, label: 'Sample DOCX' },
-                { kind: 'txt' as const, label: 'Sample TXT' },
+                { kind: 'txt', label: 'Tech TXT' },
+                { kind: 'pdf', label: 'Tech PDF' },
+                { kind: 'docx', label: 'Tech DOCX' },
+                { kind: 'nurse-txt', label: 'Nurse TXT' },
+                { kind: 'nurse-pdf', label: 'Nurse PDF' },
+                { kind: 'teacher-txt', label: 'Teacher TXT' },
+                { kind: 'teacher-pdf', label: 'Teacher PDF' },
               ]).map(({ kind, label }) => (
                 <button
                   key={kind}

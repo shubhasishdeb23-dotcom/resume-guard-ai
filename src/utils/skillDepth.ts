@@ -2,7 +2,7 @@ import { ParsedResume } from '../types';
 
 export interface SkillDepthDetail {
   skill: string;
-  context: 'project' | 'experience' | 'none';
+  context: 'project' | 'experience' | 'certification' | 'none';
   evidence: string;
 }
 
@@ -37,12 +37,24 @@ export function analyzeContextualSkillDepth(resume: ParsedResume): SkillDepthRes
     ...e.metrics.flatMap(m => [m.claim, m.context]),
   ]);
 
+  const certificationCorpus = [
+    ...resume.certifications.map(c => c.name),
+    resume.candidate.summary || '',
+  ];
+
   const details: SkillDepthDetail[] = skillNames.map(skill => {
     const skillLower = skill.toLowerCase();
     const inProject = projectCorpus.some(t => !!t && t.toLowerCase().includes(skillLower));
     const inExperience = experienceCorpus.some(t => !!t && t.toLowerCase().includes(skillLower));
+    const inCertification = certificationCorpus.some(t => !!t && t.toLowerCase().includes(skillLower));
 
-    const context: SkillDepthDetail['context'] = inProject ? 'project' : inExperience ? 'experience' : 'none';
+    const context: SkillDepthDetail['context'] = inProject
+      ? 'project'
+      : inExperience
+        ? 'experience'
+        : inCertification
+          ? 'certification'
+          : 'none';
 
     return {
       skill,
@@ -51,7 +63,9 @@ export function analyzeContextualSkillDepth(resume: ParsedResume): SkillDepthRes
         ? 'Used within project descriptions, features, or metrics'
         : inExperience
           ? 'Mentioned within experience responsibilities or outcomes'
-          : 'Only listed as a keyword without project context',
+          : inCertification
+            ? 'Referenced in the summary or a certification/licence'
+            : 'Only listed as a keyword without supporting context',
     };
   });
 

@@ -136,6 +136,9 @@ const RecruiterDashboard: React.FC = () => {
             </Link>
             
             <div className="flex items-center gap-4">
+              <Link to="/recruiter/shortlist" className="text-slate-300 hover:text-white transition-colors">
+                Shortlist
+              </Link>
               <Link to="/" className="text-slate-400 hover:text-white transition-colors">
                 Candidate Mode
               </Link>
@@ -446,6 +449,13 @@ const RecruiterDashboard: React.FC = () => {
                           >
                             <Zap className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => navigate(`/recruiter/interview/${candidate.id}`)}
+                            className="p-2 hover:bg-cyan-700 rounded-lg transition-colors text-cyan-400 hover:text-white"
+                            title="Mock interview"
+                          >
+                            <Brain className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </motion.tr>
@@ -463,14 +473,25 @@ const RecruiterDashboard: React.FC = () => {
           )}
         </motion.div>
 
-        {/* Comparison Section */}
-        {candidates.length >= 2 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="mt-8"
-          >
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link
+              to="/recruiter/shortlist"
+              className="block bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 hover:border-emerald-500/50 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                    <Award className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Transparent shortlist</h3>
+                    <p className="text-sm text-slate-400">Weighted job fit, evidence, skills, and risk — formula shown</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-slate-400" />
+              </div>
+            </Link>
+          {candidates.length >= 2 && (
             <Link
               to="/recruiter/compare"
               className="block bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 hover:border-emerald-500/50 transition-colors"
@@ -488,8 +509,8 @@ const RecruiterDashboard: React.FC = () => {
                 <ArrowRight className="w-5 h-5 text-slate-400" />
               </div>
             </Link>
-          </motion.div>
-        )}
+          )}
+        </div>
 
         {/* Why ResumeGuard Section */}
         <motion.div

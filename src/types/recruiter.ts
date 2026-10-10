@@ -98,6 +98,7 @@ export interface CandidateProfile {
   verificationStatus: 'verified' | 'pending' | 'flagged';
   uploadedAt: Date;
   status: 'new' | 'analyzing' | 'analyzed' | 'reviewing' | 'decided';
+  shortlisted?: boolean;
   decision?: RecruiterDecision;
 }
 

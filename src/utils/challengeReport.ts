@@ -80,11 +80,48 @@ export function generateChallengeReport(match: CandidateMatch, candidate: Candid
     possibleContradictions.push('High-risk signals detected in experience timeline or claims');
   }
 
+  const behavioralQuestions: InterviewQuestion[] = [
+    {
+      id: `biq_exp_${candidate.id}`,
+      category: 'behavioral',
+      claim: `${candidate.yearsExperience} years of experience`,
+      question: `Walk through a time you owned an outcome end-to-end in a role similar to this job. What was the problem, what did you personally do, and how did you know it worked?`,
+      followUp: ['What would you do differently now?', 'Who else was involved, and what was uniquely yours?'],
+      priority: 'medium',
+      reason: `Resume reports ${candidate.yearsExperience} years; confirm ownership versus participation.`,
+    },
+  ];
+
+  if (match.skillMatch.missing[0]) {
+    const missing = match.skillMatch.missing[0];
+    behavioralQuestions.push({
+      id: `biq_gap_${candidate.id}`,
+      category: 'behavioral',
+      claim: `Gap: ${missing}`,
+      question: `This role expects ${missing}, which is not evidenced on the resume. Tell us about the closest experience you have, or how you ramped on a similar gap in a previous job.`,
+      followUp: ['How long did that ramp take?', 'What artifacts could we review?'],
+      priority: 'high',
+      reason: `${missing} is a missing job requirement`,
+    });
+  }
+
+  if (match.riskLevel !== 'low') {
+    behavioralQuestions.push({
+      id: `biq_risk_${candidate.id}`,
+      category: 'behavioral',
+      claim: `Risk level ${match.riskLevel}`,
+      question: `Some claims on this resume need more evidence. Pick the claim you are most proud of and reconstruct it: context, your actions, tools, and a measurable result.`,
+      followUp: ['What would a former manager confirm?', 'What should we not take at face value?'],
+      priority: 'high',
+      reason: `Match risk is ${match.riskLevel}`,
+    });
+  }
+
   return {
     topStrongClaims: topStrongClaims.slice(0, 5),
     topWeakClaims: topWeakClaims.slice(0, 5),
     technicalQuestions: technicalQuestions.slice(0, 5),
-    behavioralQuestions: [],
+    behavioralQuestions: behavioralQuestions.slice(0, 4),
     weakestEvidenceAreas: holes.slice(0, 5),
     possibleContradictions,
   };

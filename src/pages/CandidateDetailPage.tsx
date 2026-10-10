@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -11,44 +11,42 @@ import {
   AlertTriangle,
   Target,
   Brain,
-  Award,
   Clock,
   TrendingUp,
   MessageSquare,
   FileText,
-  ExternalLink,
-  Users,
 } from 'lucide-react';
 import { useRecruiter } from '../context/RecruiterContext';
+import { useToast } from '../context/ToastContext';
 import { CandidateProfile, RecruiterDecision } from '../types/recruiter';
-import { DEMO_CANDIDATES } from '../data/demoCandidates';
+import { generatePDFReport, ExportData } from '../utils/exportReport';
+import { buildStructuredSummary } from '../utils/candidateSummary';
+import {
+  generateNarrativeSummary,
+  getOllamaEndpoint,
+  getPreferredModel,
+  ollamaSetupHint,
+} from '../utils/llm';
+import { computeShortlistScore } from '../utils/shortlist';
 
 const CandidateDetailPage: React.FC = () => {
   const { candidateId } = useParams<{ candidateId: string }>();
   const navigate = useNavigate();
-  const { getMatch, getCandidate, makeDecision, currentJob } = useRecruiter();
+  const { getMatch, getCandidate, getParsedResume, makeDecision, currentJob, toggleShortlist, shortlistWeights } = useRecruiter();
+  const { showToast } = useToast();
   
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [match, setMatch] = useState<any>(null);
-  const [challenges, setChallenges] = useState<any>(null);
   const [decision, setDecision] = useState<RecruiterDecision['decision'] | null>(null);
   const [notes, setNotes] = useState('');
   const [showDecisionModal, setShowDecisionModal] = useState(false);
+  const [narrative, setNarrative] = useState('');
+  const [narrativeBusy, setNarrativeBusy] = useState(false);
   
   useEffect(() => {
     if (candidateId) {
-      let foundCandidate = getCandidate(candidateId);
-      let foundMatch = getMatch(candidateId);
-      
-      if (!foundCandidate) {
-        const demoCandidate = DEMO_CANDIDATES.find(dc => dc.id === candidateId);
-        if (demoCandidate) {
-          foundCandidate = demoCandidate.profile;
-          foundMatch = demoCandidate.match;
-          setChallenges(demoCandidate.challenges);
-        }
-      }
-      
+      const foundCandidate = getCandidate(candidateId);
+      const foundMatch = getMatch(candidateId);
       if (foundCandidate) setCandidate(foundCandidate);
       if (foundMatch) setMatch(foundMatch);
     }
@@ -73,8 +71,57 @@ const CandidateDetailPage: React.FC = () => {
     );
   }
   
-  const demoCandidate = DEMO_CANDIDATES.find(dc => dc.id === candidateId);
-  const resume = demoCandidate?.resume;
+  const resume = candidateId ? getParsedResume(candidateId) : null;
+  const structuredSummary = candidate ? buildStructuredSummary(candidate, match, currentJob, resume) : '';
+  const shortlist = candidate && match ? computeShortlistScore(candidate, match, shortlistWeights) : null;
+
+  const handleExport = () => {
+    if (!candidate || !match) return;
+    const exportData: ExportData = {
+      candidateName: candidate.name,
+      fileName: resume?.fileName || 'session-profile',
+      uploadedAt: new Date(candidate.uploadedAt).toLocaleString(),
+      overallScore: candidate.overallScore,
+      atsScore: candidate.atsScore,
+      evidenceScore: candidate.evidenceScore,
+      skillMatch: match.skillMatch.score,
+      breakdown: [
+        { name: 'Job Fit', score: match.overallFit, recommendation: match.recommendationReason },
+        { name: 'Evidence', score: candidate.evidenceScore, recommendation: match.riskLevel === 'low' ? 'Evidence is relatively strong' : 'Verify weak claims before advancing' },
+        { name: 'Skill Match', score: match.skillMatch.score, recommendation: match.skillMatch.missing.length ? `Missing: ${match.skillMatch.missing.join(', ')}` : 'Required skills are present' },
+      ],
+      skills: (resume?.skills || candidate.topSkills.map(name => ({ name, supportLevel: 'claimed', evidence: [] }))).map((s: any) => ({
+        name: s.name,
+        supportLevel: s.supportLevel || 'claimed',
+        evidence: Array.isArray(s.evidence) ? s.evidence.map((e: any) => e.source || String(e)) : [],
+      })),
+      projects: (resume?.projects || []).map((p: any) => ({
+        name: p.name,
+        depthScore: p.depthScore || 0,
+        technologies: p.technologies || [],
+      })),
+      summary: narrative || structuredSummary,
+      jobTitle: currentJob ? `${currentJob.title} at ${currentJob.company}` : undefined,
+      recommendation: match.recommendation,
+      shortlistScore: shortlist?.score,
+    };
+    generatePDFReport(exportData);
+    showToast('success', 'Report opened. Use the browser print dialog to save a PDF.');
+  };
+
+  const handleNarrative = async () => {
+    if (!candidate) return;
+    setNarrativeBusy(true);
+    try {
+      const text = await generateNarrativeSummary(candidate, match, currentJob, resume, getPreferredModel());
+      setNarrative(text);
+      showToast('success', `Narrative generated with Ollama at ${getOllamaEndpoint()}`);
+    } catch {
+      showToast('error', ollamaSetupHint());
+    } finally {
+      setNarrativeBusy(false);
+    }
+  };
   
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-400';
@@ -106,13 +153,29 @@ const CandidateDetailPage: React.FC = () => {
             
             <div className="flex items-center gap-3">
               <button
+                onClick={() => candidate && toggleShortlist(candidate.id)}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+              >
+                {candidate.shortlisted ? 'Remove shortlist' : 'Shortlist'}
+              </button>
+              <button
+                onClick={() => navigate(`/recruiter/interview/${candidateId}`)}
+                className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Mock interview
+              </button>
+              <button
                 onClick={() => navigate(`/recruiter/challenge/${candidateId}`)}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 rounded-xl transition-colors"
               >
                 <Zap className="w-4 h-4" />
                 Challenge This Resume
               </button>
-              <button className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors">
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+              >
                 <Download className="w-4 h-4" />
                 Export Report
               </button>
@@ -199,6 +262,32 @@ const CandidateDetailPage: React.FC = () => {
               </div>
             </div>
           ))}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <h3 className="text-lg font-semibold text-white">Candidate summary</h3>
+            <button
+              onClick={handleNarrative}
+              disabled={narrativeBusy}
+              className="text-sm bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 text-white px-3 py-2 rounded-xl"
+            >
+              {narrativeBusy ? 'Generating…' : 'Rewrite with Ollama'}
+            </button>
+          </div>
+          {shortlist && (
+            <p className="text-sm text-emerald-300 mb-3">
+              Shortlist score {shortlist.score}. {shortlist.explanation}
+            </p>
+          )}
+          <p className="text-slate-300 leading-relaxed">{narrative || structuredSummary}</p>
+          {narrative && (
+            <p className="text-xs text-slate-500 mt-3">Narrative from local Ollama. Facts still come from this candidate’s stored match record.</p>
+          )}
         </motion.div>
 
         {/* Key Insight */}

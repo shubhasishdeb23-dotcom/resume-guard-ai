@@ -32,6 +32,7 @@ import { runVerificationEngine } from '../utils/verificationEngine';
 import { getAIInsights, getOllamaModels, getOllamaEndpoint, setOllamaEndpoint, AI_MODELS } from '../utils/llm';
 import { calculateQualityScore } from '../utils/scoringEngine';
 import { analyzeContextualSkillDepth } from '../utils/skillDepth';
+import { buildResumeOverview } from '../utils/candidateSummary';
 import ScoreGauge from '../components/ScoreGauge';
 import ScoreCard from '../components/ScoreCard';
 import SkillTable from '../components/SkillTable';
@@ -336,6 +337,11 @@ const AnalysisPage: React.FC = () => {
             </div>
           </div>
         </motion.div>
+
+        <div className="mb-8 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-2">Concise overview</h2>
+          <p className="text-slate-300 leading-relaxed">{buildResumeOverview(currentResume, score, evidenceScore)}</p>
+        </div>
 
         {/* Score Overview */}
         <motion.div

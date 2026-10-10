@@ -28,6 +28,10 @@ export interface ExportData {
     suspicious: number;
     triggeredRules: string[];
   };
+  summary?: string;
+  jobTitle?: string;
+  recommendation?: string;
+  shortlistScore?: number;
 }
 
 export function generatePDFReport(data: ExportData): void {
@@ -91,7 +95,16 @@ export function generatePDFReport(data: ExportData): void {
     <p><strong>Name:</strong> ${data.candidateName}</p>
     <p><strong>File:</strong> ${data.fileName}</p>
     <p><strong>Uploaded:</strong> ${data.uploadedAt}</p>
+    ${data.jobTitle ? `<p><strong>Job:</strong> ${data.jobTitle}</p>` : ''}
+    ${data.recommendation ? `<p><strong>Engine recommendation:</strong> ${data.recommendation.replace(/_/g, ' ')}</p>` : ''}
+    ${typeof data.shortlistScore === 'number' ? `<p><strong>Shortlist score:</strong> ${data.shortlistScore}</p>` : ''}
   </div>
+  ${data.summary ? `
+  <div class="section">
+    <div class="section-title">Candidate Summary</div>
+    <p>${data.summary}</p>
+  </div>
+  ` : ''}
 
   <div class="section">
     <div class="section-title">Overall Scores</div>

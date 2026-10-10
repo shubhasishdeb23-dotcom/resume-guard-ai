@@ -8,12 +8,15 @@ import { analyzeContextualSkillDepth } from '../utils/skillDepth';
 import { DEMO_JOB, DEMO_CANDIDATES } from '../data/demoCandidates';
 import { ParsedResume } from '../types';
 import { saveState, loadState } from '../utils/storage';
+import { DEFAULT_SHORTLIST_WEIGHTS, ShortlistWeights } from '../utils/shortlist';
 
 const JOBS_KEY = 'rg.jobs_v1';
 const CURRENT_JOB_KEY = 'rg.current_job_v1';
 const CANDIDATES_KEY = 'rg.candidates_v1';
 const MATCHES_KEY = 'rg.matches_v1';
 const DECISIONS_KEY = 'rg.decisions_v1';
+const PARSED_RESUMES_KEY = 'rg.parsed_resumes_v1';
+const WEIGHTS_KEY = 'rg.shortlist_weights_v1';
 
 interface RecruiterContextType {
   jobs: JobDescription[];
@@ -21,6 +24,8 @@ interface RecruiterContextType {
   candidates: CandidateProfile[];
   matches: CandidateMatch[];
   decisions: RecruiterDecision[];
+  parsedResumes: Record<string, ParsedResume>;
+  shortlistWeights: ShortlistWeights;
   analytics: DashboardAnalytics;
   isLoading: boolean;
   
@@ -31,12 +36,15 @@ interface RecruiterContextType {
   addCandidate: (resume: ParsedResume, evidenceScore: number) => void;
   removeCandidate: (candidateId: string) => void;
   updateCandidateStatus: (candidateId: string, status: CandidateProfile['status']) => void;
+  toggleShortlist: (candidateId: string) => void;
+  setShortlistWeights: (weights: ShortlistWeights) => void;
   
   makeDecision: (candidateId: string, decision: RecruiterDecision['decision'], notes: string) => void;
   
   loadDemoData: () => void;
   getMatch: (candidateId: string) => CandidateMatch | null;
   getCandidate: (candidateId: string) => CandidateProfile | null;
+  getParsedResume: (candidateId: string) => ParsedResume | null;
   
   compareCandidates: (candidateIds: string[]) => any;
 }
@@ -49,6 +57,10 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [candidates, setCandidates] = useState<CandidateProfile[]>(() => loadState<CandidateProfile[]>(CANDIDATES_KEY, []));
   const [matches, setMatches] = useState<CandidateMatch[]>(() => loadState<CandidateMatch[]>(MATCHES_KEY, []));
   const [decisions, setDecisions] = useState<RecruiterDecision[]>(() => loadState<RecruiterDecision[]>(DECISIONS_KEY, []));
+  const [parsedResumes, setParsedResumes] = useState<Record<string, ParsedResume>>(() => loadState(PARSED_RESUMES_KEY, {}));
+  const [shortlistWeights, setShortlistWeightsState] = useState<ShortlistWeights>(() =>
+    loadState(WEIGHTS_KEY, DEFAULT_SHORTLIST_WEIGHTS),
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const currentJob = jobs.find(j => j.id === currentJobId) ?? null;
@@ -58,6 +70,8 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => saveState(CANDIDATES_KEY, candidates), [candidates]);
   useEffect(() => saveState(MATCHES_KEY, matches), [matches]);
   useEffect(() => saveState(DECISIONS_KEY, decisions), [decisions]);
+  useEffect(() => saveState(PARSED_RESUMES_KEY, parsedResumes), [parsedResumes]);
+  useEffect(() => saveState(WEIGHTS_KEY, shortlistWeights), [shortlistWeights]);
 
   const calculateAnalytics = useCallback((): DashboardAnalytics => {
     const totalCandidates = candidates.length;
@@ -204,6 +218,7 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       status: 'analyzing',
     };
     
+    setParsedResumes(prev => ({ ...prev, [profile.id]: resume }));
     setCandidates(prev => [...prev, profile]);
     
     const match = { ...matchCandidateToJob(resume, job, evidenceScore), resumeId: profile.id };
@@ -219,6 +234,19 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const removeCandidate = useCallback((candidateId: string) => {
     setCandidates(prev => prev.filter(c => c.id !== candidateId));
     setMatches(prev => prev.filter(m => m.resumeId !== candidateId));
+    setParsedResumes(prev => {
+      const next = { ...prev };
+      delete next[candidateId];
+      return next;
+    });
+  }, []);
+
+  const toggleShortlist = useCallback((candidateId: string) => {
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, shortlisted: !c.shortlisted } : c));
+  }, []);
+
+  const setShortlistWeights = useCallback((weights: ShortlistWeights) => {
+    setShortlistWeightsState(weights);
   }, []);
 
   const updateCandidateStatus = useCallback((candidateId: string, status: CandidateProfile['status']) => {
@@ -268,8 +296,14 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       analyzedAt: new Date(),
     }));
     
+    const resumeMap: Record<string, ParsedResume> = {};
+    DEMO_CANDIDATES.forEach((dc, i) => {
+      resumeMap[demoProfiles[i].id] = dc.resume as ParsedResume;
+    });
+    
     setCandidates(demoProfiles);
     setMatches(demoMatches);
+    setParsedResumes(resumeMap);
   }, []);
 
   const getMatch = useCallback((candidateId: string): CandidateMatch | null => {
@@ -279,6 +313,10 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const getCandidate = useCallback((candidateId: string): CandidateProfile | null => {
     return candidates.find(c => c.id === candidateId) || null;
   }, [candidates]);
+
+  const getParsedResume = useCallback((candidateId: string): ParsedResume | null => {
+    return parsedResumes[candidateId] || null;
+  }, [parsedResumes]);
 
   const compareCandidates = useCallback((candidateIds: string[]) => {
     const selectedCandidates = candidates.filter(c => candidateIds.includes(c.id));
@@ -318,7 +356,7 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       candidates: selectedCandidates,
       categories,
       summary: `Comparing ${selectedCandidates.length} candidates for ${currentJob?.title || 'position'}`,
-      recommendation: `${selectedCandidates[bestIdx]?.name || 'No candidate'} proves skills with real project context (Skill Depth ${depthScores[bestIdx] || 0}%) alongside the strongest evidence — the AI picks this candidate.`,
+      recommendation: `${selectedCandidates[bestIdx]?.name || 'No candidate'} ranks first on this comparison: job fit, evidence, and skill depth (Skill Depth ${depthScores[bestIdx] || 0}%).`,
     };
   }, [candidates, matches, currentJob]);
 
@@ -331,6 +369,8 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       candidates,
       matches,
       decisions,
+      parsedResumes,
+      shortlistWeights,
       analytics,
       isLoading,
       createJob,
@@ -339,10 +379,13 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       addCandidate,
       removeCandidate,
       updateCandidateStatus,
+      toggleShortlist,
+      setShortlistWeights,
       makeDecision,
       loadDemoData,
       getMatch,
       getCandidate,
+      getParsedResume,
       compareCandidates,
     }}>
       {children}

@@ -15,7 +15,7 @@ export function calculateResumeScore(resume: ParsedResume): ResumeScore {
   const atsCompatibility = calculateATSScore(resume);
   const skillRelevance = calculateSkillScore(resume.skills);
   const experienceEvidence = calculateExperienceScore(resume);
-  const projectStrength = calculateProjectScore(resume.projects);
+  const projectStrength = calculateDemonstratedEvidence(resume);
   const quantification = calculateQuantificationScore(resume);
   const consistency = calculateConsistencyScore(resume);
   const credibility = calculateCredibilityScore(resume);
@@ -70,7 +70,10 @@ function calculateATSScore(resume: ParsedResume): ScoreComponent {
   else { issues.push('Missing phone'); }
   
   if (resume.candidate.links.linkedin) { score += 5; evidence.push('LinkedIn present'); }
-  if (resume.candidate.links.github) { score += 5; evidence.push('GitHub present'); }
+  if (resume.candidate.links.github || resume.candidate.links.portfolio || resume.candidate.links.other.length > 0) {
+    score += 5;
+    evidence.push('Portfolio / professional link present');
+  }
   if (resume.experience.length >= 2) { score += 10; evidence.push('Multiple experience entries'); }
   if (resume.skills.length >= 5) { score += 10; evidence.push('Skills section populated'); }
   
@@ -131,7 +134,7 @@ function calculateExperienceScore(resume: ParsedResume): ScoreComponent {
       maxScore: 100,
       explanation: 'No work experience entries found.',
       evidence: ['Experience section is empty'],
-      recommendation: 'Add work experience with specific achievements and technologies used.',
+      recommendation: 'Add work experience with specific achievements and the skills or tools you used.',
     };
   }
   
@@ -153,7 +156,7 @@ function calculateExperienceScore(resume: ParsedResume): ScoreComponent {
   const withTech = experience.filter(e => e.technologies.length > 0).length;
   if (withTech > 0) {
     score += 15;
-    evidence.push(`${withTech} position(s) with technology details`);
+    evidence.push(`${withTech} position(s) with skills or tools mentioned`);
   }
   
   const currentExp = experience.find(e => e.current);
@@ -171,34 +174,73 @@ function calculateExperienceScore(resume: ParsedResume): ScoreComponent {
   };
 }
 
-function calculateProjectScore(projects: ParsedResume['projects']): ScoreComponent {
-  if (projects.length === 0) {
+// Field-agnostic evidence score: projects/portfolio when present, otherwise
+// work experience depth. Every career documents proof differently.
+function calculateDemonstratedEvidence(resume: ParsedResume): ScoreComponent {
+  const { projects, experience, certifications } = resume;
+  
+  if (projects.length === 0 && experience.length === 0) {
     return {
-      score: 0,
+      score: 25,
       maxScore: 100,
-      explanation: 'No projects found in resume.',
-      evidence: ['Projects section is empty'],
-      recommendation: 'Add projects with problem statement, technologies, and outcomes.',
+      explanation: 'No projects, portfolio entries or work experience found.',
+      evidence: ['Nothing to assess yet'],
+      recommendation: 'Add work experience or portfolio entries with outcomes and numbers.',
     };
   }
   
-  const avgDepth = projects.reduce((sum, p) => sum + p.depthScore, 0) / projects.length;
-  const withGithub = projects.filter(p => p.github).length;
-  const withMetrics = projects.filter(p => p.metrics.length > 0).length;
+  const evidence: string[] = [];
   
-  const evidence: string[] = [
-    `${projects.length} projects documented`,
-    `Average depth score: ${Math.round(avgDepth)}/100`,
-    `${withGithub} project(s) with GitHub links`,
-    `${withMetrics} project(s) with metrics`,
-  ];
+  const avgDepth = projects.length > 0
+    ? projects.reduce((sum, p) => sum + p.depthScore, 0) / projects.length
+    : 0;
+  const withPublicLinks = projects.filter(p => p.github || p.demo).length;
+  const projectMetrics = projects.filter(p => p.metrics.length > 0).length;
+  
+  const expScores = experience.map(e => {
+    let s = 40;
+    if (e.responsibilities.length >= 3) s += 15;
+    if (e.metrics.length > 0 || e.achievements.length > 0) s += 25;
+    if (e.technologies.length > 0) s += 10;
+    if (e.current) s += 5;
+    return Math.min(s, 100);
+  });
+  const expAvg = expScores.length > 0 ? expScores.reduce((a, b) => a + b, 0) / expScores.length : 0;
+  const expWithMetrics = experience.filter(e => e.metrics.length > 0 || e.achievements.length > 0).length;
+  
+  if (projects.length > 0) {
+    evidence.push(`${projects.length} project/portfolio entr${projects.length === 1 ? 'y' : 'ies'} (avg depth ${Math.round(avgDepth)}/100)`);
+  }
+  if (withPublicLinks > 0) {
+    evidence.push(`${withPublicLinks} with public links (repo, portfolio or demo)`);
+  }
+  if (projectMetrics > 0) {
+    evidence.push(`${projectMetrics} project(s) with quantified results`);
+  }
+  if (experience.length > 0) {
+    evidence.push(`${experience.length} position(s) assessed — ${expWithMetrics} with quantified outcomes`);
+  }
+  if (certifications.length > 0) {
+    evidence.push(`${certifications.length} certification/licence(s) adding verifiable weight`);
+  }
+  
+  let score: number;
+  if (projects.length > 0 && experience.length > 0) {
+    score = Math.round(avgDepth * 0.5 + expAvg * 0.4 + Math.min(certifications.length * 10, 10));
+  } else if (projects.length > 0) {
+    score = Math.round(avgDepth);
+  } else {
+    score = Math.round(expAvg + Math.min(certifications.length * 5, 10));
+  }
   
   return {
-    score: Math.round(avgDepth),
+    score: Math.min(score, 100),
     maxScore: 100,
-    explanation: 'Project strength measures technical depth and documentation quality.',
+    explanation: 'Evidence strength measures how well work is documented with specifics, outcomes and public proof.',
     evidence,
-    recommendation: avgDepth < 70 ? 'Add more details: problem, solution, technologies, metrics' : 'Projects are well-documented',
+    recommendation: score < 70
+      ? 'Add specifics: what you did, the problem, the tools used and the measurable result.'
+      : 'Evidence is well documented.',
   };
 }
 
@@ -276,12 +318,12 @@ function calculateCredibilityScore(resume: ParsedResume): ScoreComponent {
   const evidence: string[] = [];
   let score = 50;
   
-  if (resume.candidate.links.github) {
-    score += 15;
-    evidence.push('GitHub profile linked');
+  if (resume.candidate.links.github || resume.candidate.links.portfolio || resume.candidate.links.other.length > 0) {
+    score += 12;
+    evidence.push('Public professional link present (portfolio, repo or website)');
   }
   if (resume.candidate.links.linkedin) {
-    score += 15;
+    score += 13;
     evidence.push('LinkedIn profile linked');
   }
   if (resume.certifications.length > 0) {

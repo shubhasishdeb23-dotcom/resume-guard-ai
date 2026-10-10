@@ -190,6 +190,7 @@ export interface ATSAnalysis {
     location: boolean;
     linkedin: boolean;
     github: boolean;
+    portfolio: boolean;
   };
   length: {
     pages: number;

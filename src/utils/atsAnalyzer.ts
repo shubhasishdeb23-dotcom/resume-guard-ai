@@ -1,4 +1,5 @@
 import { ParsedResume, ATSAnalysis } from '../types';
+import { SKILL_CATEGORIES, countSkillMentions } from '../data/skillTaxonomy';
 
 export function analyzeATS(resume: ParsedResume): ATSAnalysis {
   const keywords = analyzeKeywords(resume);
@@ -31,24 +32,33 @@ export function analyzeATS(resume: ParsedResume): ATSAnalysis {
 function analyzeKeywords(resume: ParsedResume) {
   const allText = [
     resume.candidate.summary || '',
-    ...resume.experience.flatMap(e => [...e.responsibilities, ...e.technologies]),
-    ...resume.projects.flatMap(p => [p.description, ...p.technologies]),
+    ...resume.experience.flatMap(e => [...e.responsibilities, ...e.achievements, ...e.technologies]),
+    ...resume.projects.flatMap(p => [p.description, ...p.features, ...p.technologies]),
+    ...resume.certifications.map(c => c.name),
     ...resume.skills.map(s => s.name),
   ].join(' ').toLowerCase();
   
-  const commonKeywords = [
-    'javascript', 'python', 'java', 'typescript', 'react', 'node', 'sql', 'aws',
-    'docker', 'kubernetes', 'git', 'agile', 'scrum', 'api', 'rest', 'graphql',
-    'mongodb', 'postgresql', 'redis', 'microservices', 'ci/cd', 'testing',
-    'leadership', 'collaboration', 'communication', 'problem-solving',
-  ];
+  // Keyword relevance is judged against the candidate's own fields, not a fixed tech list
+  const categoryCounts = new Map<string, number>();
+  resume.skills.forEach(s => categoryCounts.set(s.category, (categoryCounts.get(s.category) || 0) + 1));
+  const topCategories = [...categoryCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([category]) => category);
+  
+  const fallback = SKILL_CATEGORIES.find(c => c.category === 'Soft & Transferable Skills');
+  const expected = topCategories.length > 0
+    ? SKILL_CATEGORIES
+        .filter(c => topCategories.includes(c.category))
+        .flatMap(c => c.skills.slice(0, 14))
+    : (fallback?.skills.slice(0, 14) || []);
   
   const found: string[] = [];
   const missing: string[] = [];
   const density: Record<string, number> = {};
   
-  commonKeywords.forEach(keyword => {
-    const count = (allText.match(new RegExp(keyword, 'g')) || []).length;
+  expected.forEach(keyword => {
+    const count = countSkillMentions(allText, keyword);
     if (count > 0) {
       found.push(keyword);
       density[keyword] = count;
@@ -76,7 +86,9 @@ function analyzeSections(resume: ParsedResume) {
   if (resume.skills.length > 0) present.push('Skills');
   else missing.push('Skills');
   
-  if (resume.projects.length > 0) present.push('Projects');
+  if (resume.projects.length > 0) present.push('Projects / Portfolio');
+  
+  if (resume.certifications.length > 0) present.push('Certifications / Licences');
   
   const order = present.slice();
   
@@ -96,12 +108,14 @@ function analyzeFormatting(resume: ParsedResume) {
 }
 
 function analyzeContactInfo(resume: ParsedResume) {
+  const links = resume.candidate.links;
   return {
     email: !!resume.candidate.email,
     phone: !!resume.candidate.phone,
     location: !!resume.candidate.location,
-    linkedin: !!resume.candidate.links.linkedin,
-    github: !!resume.candidate.links.github,
+    linkedin: !!links.linkedin,
+    github: !!links.github,
+    portfolio: !!(links.portfolio || links.other.length > 0),
   };
 }
 

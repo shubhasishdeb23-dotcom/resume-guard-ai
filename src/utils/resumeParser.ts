@@ -1,4 +1,5 @@
 import { ParsedResume, SkillEntry, ProjectEntry, ExperienceEntry, EducationEntry, CertificationEntry, MetricClaim } from '../types';
+import { ALL_SKILLS, getSkillCategory, skillPattern, CERTIFICATION_KEYWORDS, PORTFOLIO_DOMAINS, SOCIAL_DOMAINS } from '../data/skillTaxonomy';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 let mammothModule: any = null;
@@ -21,28 +22,60 @@ const getPdfJs = async () => {
   return pdfjsLib;
 };
 
-// Common skill keywords for extraction
-const TECH_SKILLS = [
-  'javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'go', 'rust', 'ruby', 'php', 'swift', 'kotlin',
-  'react', 'vue', 'angular', 'node.js', 'nodejs', 'express', 'django', 'flask', 'spring', 'dotnet', '.net',
-  'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'jenkins', 'git', 'github', 'gitlab',
-  'sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'elasticsearch', 'graphql', 'rest', 'api',
-  'machine learning', 'deep learning', 'ml', 'ai', 'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'pandas', 'numpy',
-  'data science', 'data analysis', 'spark', 'hadoop', 'etl',
-  'html', 'css', 'sass', 'tailwind', 'bootstrap', 'figma', 'ui', 'ux',
-  'agile', 'scrum', 'jira', 'confluence', 'slack', 'trello',
-  'linux', 'unix', 'bash', 'shell', 'devops', 'ci/cd',
-  'fastapi', 'flask', 'django', 'spring boot', 'microservices', 'serverless',
-  'nlp', 'computer vision', 'neural networks', 'gan', 'transformers',
+// Canonical section names mapped to the header patterns used across industries.
+const SECTION_ALIASES: { name: string; patterns: RegExp[] }[] = [
+  {
+    name: 'experience',
+    patterns: [
+      /^(?:professional\s+|work\s+|relevant\s+|career\s+)?experience/i,
+      /^work\s*history/i, /^employment/i, /^career\s*history/i, /^positions?\s*held/i,
+      /^clinical\s+experience/i, /^field\s+experience/i, /^practicum/i, /^student\s+teaching/i,
+      /^volunteer\s+experience/i, /^professional\s+background/i, /^professional\s+history/i,
+    ],
+  },
+  { name: 'education', patterns: [/^education/i, /^academic/i, /^academic\s+background/i, /^qualifications/i] },
+  {
+    name: 'skills',
+    patterns: [
+      /^skills/i, /^technical\s*skills/i, /^key\s*skills/i, /^core\s*skills/i,
+      /^competencies/i, /^core\s*competencies/i, /^areas?\s+of\s+expertise/i,
+      /^technologies/i, /^proficiencies/i, /^specialized\s+skills/i,
+    ],
+  },
+  {
+    name: 'projects',
+    patterns: [
+      /^projects/i, /^(?:personal|key|selected|major|academic|research|side)\s*projects/i,
+      /^portfolio/i, /^case\s*studies/i, /^capstone/i, /^selected\s+work/i,
+    ],
+  },
+  {
+    name: 'certifications',
+    patterns: [
+      /^certifications?/i, /^certificates?/i, /^licen[cs]es?/i, /^licensure/i,
+      /^credentials?/i, /^certifications?\s*(?:&|and)\s*licen[cs]es?/i,
+      /^licen[cs]es?\s*(?:&|and)\s*certifications?/i, /^professional\s+credentials/i,
+    ],
+  },
+  {
+    name: 'achievements',
+    patterns: [/^achievements/i, /^accomplishments/i, /^awards/i, /^honors/i, /^honours/i, /^awards?\s*(?:&|and)\s*honors?/i],
+  },
+  { name: 'summary', patterns: [/^(?:professional\s+)?summary/i, /^profile/i, /^objective/i, /^about\s*me/i, /^career\s+summary/i, /^professional\s+profile/i] },
+  { name: 'publications', patterns: [/^publications/i, /^research/i, /^papers/i, /^presentations/i] },
+  { name: 'training', patterns: [/^training/i, /^professional\s+development/i, /^courses?/i, /^education\s*(?:&|and)\s*training/i] },
+  { name: 'languages', patterns: [/^languages/i] },
+  { name: 'interests', patterns: [/^interests/i, /^hobbies/i, /^activities/i] },
+  { name: 'references', patterns: [/^references/i] },
 ];
 
-const SOFT_SKILLS = [
-  'leadership', 'communication', 'teamwork', 'team work', 'problem-solving', 'problem solving', 'analytical',
-  'project management', 'mentoring', 'collaboration', 'presentation', 'negotiation',
-  'critical thinking', 'time management', 'adaptability', 'creativity',
-];
+// Terms that indicate a quantified, evidence-bearing achievement in any field.
+const METRIC_UNIT_PATTERN = /\b(?:percent|%|users?|customers?|clients?|patients?|students?|people|employees?|staff|members?|team|engineers?|nurses?|volunteers?|hours?|days?|weeks?|months?|years?|revenue|sales|costs?|dollars?|usd|inr|budget|profit|units?|tickets?|cases?|claims?|accounts?|calls?|orders?|transactions?|visits?|events?|records?|files?|tests?|deployments?|projects?|locations?|stores?|bed|beds|classrooms?|schools?|vehicles?|miles|tons|acres?|gallons?)\b/i;
 
-const ALL_SKILLS = [...TECH_SKILLS, ...SOFT_SKILLS];
+function hasQuantifiedAchievement(text: string): boolean {
+  if (!/\d/.test(text)) return false;
+  return /\d+(?:\.\d+)?\s*%|\d[\d,]*\+?\s*(?:percent\b)/i.test(text) || METRIC_UNIT_PATTERN.test(text);
+}
 
 // Extract text from PDF using pdf.js
 async function extractTextFromPDF(file: File): Promise<string> {
@@ -212,7 +245,12 @@ function extractName(text: string): string {
       
       if (isProperName || (isNameFormat && words.length <= 4)) {
         // Additional check: not a common section header
-        const sectionHeaders = ['experience', 'education', 'skills', 'projects', 'summary', 'objective', 'work', 'professional', 'employment'];
+        const sectionHeaders = [
+          'experience', 'education', 'skills', 'projects', 'summary', 'objective',
+          'work', 'professional', 'employment', 'certification', 'certificate', 'license',
+          'achievements', 'accomplishments', 'awards', 'honors', 'publications', 'training',
+          'volunteer', 'profile', 'competencies', 'qualifications', 'portfolio', 'references',
+        ];
         const isHeader = sectionHeaders.some(header => line.toLowerCase().includes(header));
         
         if (!isHeader) {
@@ -269,26 +307,38 @@ function extractGitHub(text: string): string {
   return match ? match[0] : '';
 }
 
-// Extract portfolio/website
+// Extract portfolio/website (any professional link that is not a social feed)
 function extractPortfolio(text: string): string {
-  const urlRegex = /https?:\/\/(?!linkedin|github|facebook|twitter|instagram)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?/gi;
-  const matches = text.match(urlRegex);
-  return matches ? matches[0] : '';
+  const urlRegex = /https?:\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:\/[^\s]*)?/gi;
+  const matches = text.match(urlRegex) || [];
+  for (const url of matches) {
+    const lower = url.toLowerCase();
+    if (lower.includes('linkedin.com')) continue;
+    if (SOCIAL_DOMAINS.some(domain => lower.includes(domain))) continue;
+    return url;
+  }
+  return '';
+}
+
+// Detect public portfolio / evidence links (repos, portfolios, profiles)
+function extractPortfolioLinks(text: string): string[] {
+  const urlRegex = /https?:\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:\/[^\s]*)?/gi;
+  const matches = text.match(urlRegex) || [];
+  const found: string[] = [];
+  for (const url of matches) {
+    const lower = url.toLowerCase();
+    if (lower.includes('linkedin.com')) continue;
+    if (SOCIAL_DOMAINS.some(domain => lower.includes(domain))) continue;
+    if (PORTFOLIO_DOMAINS.some(domain => lower.includes(domain)) || !found.includes(url)) {
+      found.push(url);
+    }
+  }
+  return Array.from(new Set(found));
 }
 
 // Find section boundaries
 function findSectionBoundaries(text: string): Map<string, { start: number; end: number }> {
   const sections = new Map<string, { start: number; end: number }>();
-  
-  const sectionPatterns = [
-    { name: 'experience', patterns: [/^(?:professional\s+)?experience/i, /^work\s*history/i, /^employment/i, /^work\s*experience/i] },
-    { name: 'education', patterns: [/^education/i, /^academic/i] },
-    { name: 'skills', patterns: [/^skills/i, /^technical\s*skills/i, /^technologies/i, /^competencies/i] },
-    { name: 'projects', patterns: [/^projects/i, /^personal\s*projects/i, /^key\s*projects/i] },
-    { name: 'certifications', patterns: [/^certifications?/i, /^certificates/i] },
-    { name: 'achievements', patterns: [/^achievements/i, /^awards/i, /^honors/i, /^honours/i] },
-    { name: 'summary', patterns: [/^(?:professional\s+)?summary/i, /^profile/i, /^objective/i, /^about\s*me/i] },
-  ];
   
   const lines = text.split('\n');
   let currentSection: string | null = null;
@@ -298,7 +348,7 @@ function findSectionBoundaries(text: string): Map<string, { start: number; end: 
     const trimmedLine = line.trim().toLowerCase();
     
     // Check if this line is a section header
-    for (const section of sectionPatterns) {
+    for (const section of SECTION_ALIASES) {
       const isMatch = section.patterns.some(pattern => {
         const match = trimmedLine.match(pattern);
         return match && trimmedLine.length < 50; // Section headers are usually short
@@ -333,10 +383,12 @@ function getSectionText(text: string, sectionName: string): string {
   if (!section) {
     // Try to find section content by pattern
     const patterns: Record<string, RegExp> = {
-      experience: /(?:professional\s+)?experience[\s\S]*?(?=\n\s*(?:education|skills|projects|certifications|achievements|$))/i,
-      education: /education[\s\S]*?(?=\n\s*(?:experience|skills|projects|certifications|achievements|$))/i,
-      skills: /skills[\s\S]*?(?=\n\s*(?:experience|education|projects|certifications|achievements|$))/i,
-      projects: /projects[\s\S]*?(?=\n\s*(?:experience|education|skills|certifications|achievements|$))/i,
+      experience: /(?:professional\s+|work\s+|clinical\s+|field\s+)?experience[\s\S]*?(?=\n\s*(?:education|skills|projects|certifications|licen[cs]es|achievements|awards|publications|training|languages|interests|references|$))/i,
+      education: /education[\s\S]*?(?=\n\s*(?:experience|skills|projects|certifications|licen[cs]es|achievements|awards|publications|training|languages|interests|references|$))/i,
+      skills: /(?:skills|competencies|proficiencies)[\s\S]*?(?=\n\s*(?:experience|education|projects|certifications|licen[cs]es|achievements|awards|publications|training|languages|interests|references|$))/i,
+      projects: /(?:projects|portfolio|case\s*studies)[\s\S]*?(?=\n\s*(?:experience|education|skills|certifications|licen[cs]es|achievements|awards|publications|training|languages|interests|references|$))/i,
+      certifications: /(?:certifications?|certificates?|licen[cs]es?|credentials)[\s\S]*?(?=\n\s*(?:experience|education|skills|projects|achievements|awards|publications|training|languages|interests|references|$))/i,
+      achievements: /(?:achievements|accomplishments|awards|honors?)[\s\S]*?(?=\n\s*(?:experience|education|skills|projects|certifications|licen[cs]es|publications|training|languages|interests|references|$))/i,
     };
     
     const pattern = patterns[sectionName];
@@ -351,28 +403,49 @@ function getSectionText(text: string, sectionName: string): string {
   return lines.slice(section.start, section.end).join('\n');
 }
 
+// Read the first section that exists, trying several aliases (e.g. clinical experience)
+function getSectionTextAny(text: string, sectionNames: string[]): string {
+  for (const name of sectionNames) {
+    const value = getSectionText(text, name);
+    if (value) return value;
+  }
+  return '';
+}
+
+// Preserve common professional acronyms, otherwise capitalize the first letter.
+const SKILL_ACRONYMS = new Set([
+  'cpr', 'bls', 'acls', 'pals', 'rn', 'lpn', 'lvn', 'cna', 'emt', 'cdl', 'cpa', 'cfa',
+  'crm', 'seo', 'sem', 'hvac', 'osha', 'gd&t', 'p&l', 'kpi', 'okr', 'emr', 'ehr', 'icu',
+  'iep', 'esl', 'tesol', 'tefl', 'sql', 'aws', 'gcp', 'api', 'ui', 'ux', 'gis', 'pmp',
+  'csm', 'psm', 'shrm', 'phr', 'sphr', 'hris', 'pos', 'mls', 'gdpr', 'lcsw', 'lmsw',
+  'lmft', 'lpc', 'cma', 'aprn', 'pharmd', 'aed', 'vba', 'plc', 'cnc', 'cad', 'fda', 'hipaa',
+]);
+
+function formatSkillName(skill: string): string {
+  const lower = skill.toLowerCase();
+  if (SKILL_ACRONYMS.has(lower)) return lower.toUpperCase();
+  return skill.charAt(0).toUpperCase() + skill.slice(1);
+}
+
 // Extract skills from text
 function extractSkills(text: string): SkillEntry[] {
   const skills: SkillEntry[] = [];
   
-  // Get skills section for context
-  const skillsSection = getSectionText(text, 'skills');
-  const skillsSectionLower = skillsSection.toLowerCase();
+  // Get section context once for all skill lookups
+  const skillsSectionLower = getSectionText(text, 'skills').toLowerCase();
+  const expSectionLower = getSectionTextAny(text, ['experience']).toLowerCase();
+  const projSectionLower = getSectionTextAny(text, ['projects']).toLowerCase();
+  const certSectionLower = getSectionTextAny(text, ['certifications']).toLowerCase();
   
-  // Find all skill mentions
+  // Find all skill mentions across industries
   ALL_SKILLS.forEach(skillName => {
     const skillLower = skillName.toLowerCase();
-    
-    // Create regex that matches the skill as a whole word
-    const escapedSkill = skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${escapedSkill}\\b`, 'gi');
-    const matches = text.match(regex);
+    const matches = text.match(skillPattern(skillLower));
     
     if (matches && matches.length > 0) {
       // Find evidence for this skill
       const evidence: SkillEntry['evidence'] = [];
       
-      // Check if skill is in skills section
       if (skillsSectionLower.includes(skillLower)) {
         evidence.push({
           source: 'Skills section',
@@ -381,47 +454,34 @@ function extractSkills(text: string): SkillEntry[] {
         });
       }
       
-      // Check experience section
-      const expSection = getSectionText(text, 'experience');
-      if (expSection.toLowerCase().includes(skillLower)) {
+      if (expSectionLower.includes(skillLower)) {
         evidence.push({
           source: 'Experience section',
           type: 'experience',
-          context: 'Mentioned in work experience',
+          context: 'Demonstrated in work experience',
         });
       }
       
-      // Check projects section
-      const projSection = getSectionText(text, 'projects');
-      if (projSection.toLowerCase().includes(skillLower)) {
+      if (projSectionLower.includes(skillLower)) {
         evidence.push({
-          source: 'Projects section',
+          source: 'Projects / portfolio section',
           type: 'project',
-          context: 'Used in projects',
+          context: 'Used in projects or portfolio',
         });
       }
       
-      // Determine category
-      let category = 'Technical';
-      if (SOFT_SKILLS.includes(skillLower)) {
-        category = 'Soft Skills';
-      } else if (['aws', 'azure', 'gcp', 'docker', 'kubernetes', 'jenkins', 'ci/cd', 'devops'].includes(skillLower)) {
-        category = 'DevOps & Cloud';
-      } else if (['javascript', 'typescript', 'python', 'java', 'c++', 'go', 'rust', 'ruby', 'php'].includes(skillLower)) {
-        category = 'Programming Languages';
-      } else if (['react', 'vue', 'angular', 'node.js', 'nodejs', 'django', 'flask', 'spring', 'fastapi'].includes(skillLower)) {
-        category = 'Frameworks';
-      } else if (['sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'elasticsearch'].includes(skillLower)) {
-        category = 'Databases';
-      } else if (['machine learning', 'deep learning', 'ml', 'ai', 'tensorflow', 'pytorch', 'keras', 'nlp', 'computer vision'].includes(skillLower)) {
-        category = 'Machine Learning';
+      if (certSectionLower.includes(skillLower)) {
+        evidence.push({
+          source: 'Certifications section',
+          type: 'certification',
+          context: 'Referenced in certifications or licences',
+        });
       }
       
       // Determine confidence and support level
       let confidence: SkillEntry['confidence'] = 'low';
       let supportLevel: SkillEntry['supportLevel'] = 'unsupported';
       
-      // Count evidence from different sources
       const evidenceCount = evidence.length;
       const hasProjectEvidence = evidence.some(e => e.type === 'project');
       const hasExperienceEvidence = evidence.some(e => e.type === 'experience');
@@ -439,8 +499,8 @@ function extractSkills(text: string): SkillEntry[] {
       
       skills.push({
         id: `skill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: skillName.charAt(0).toUpperCase() + skillName.slice(1),
-        category,
+        name: formatSkillName(skillName),
+        category: getSkillCategory(skillName),
         claimed: true,
         evidence,
         confidence,
@@ -481,117 +541,174 @@ function parseDate(dateStr: string): string {
   return dateStr.trim();
 }
 
+// Extract quantified claims (numbers with a unit or percentage) from any field
+function extractMetricClaims(source: string): MetricClaim[] {
+  const metrics: MetricClaim[] = [];
+  const metricRegex = /(\d[\d,]*(?:\.\d+)?)\s*(%)?\s*([A-Za-z][A-Za-z -]{0,25})/g;
+  let match: RegExpExecArray | null;
+  while ((match = metricRegex.exec(source)) !== null) {
+    const hasPercent = !!match[2];
+    const trailing = (match[3] || '').trim();
+    const unitLike = hasPercent || METRIC_UNIT_PATTERN.test(trailing);
+    if (!unitLike) continue;
+    metrics.push({
+      id: `metric_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      claim: match[0].trim(),
+      value: parseFloat(match[1].replace(/,/g, '')),
+      unit: hasPercent ? '%' : trailing,
+      context: source.slice(Math.max(0, match.index - 50), match.index + match[0].length + 50),
+      supportLevel: hasPercent ? 'high' : 'medium',
+      verification: hasPercent
+        ? 'Percentage claim — confirm the baseline and how it was measured'
+        : 'Numeric claim — confirm the unit, timeframe and baseline',
+    });
+    if (metrics.length >= 8) break;
+  }
+  return metrics;
+}
+
 // Extract work experience
+const ROLE_KEYWORD = /\b(engineer|developer|programmer|nurse|nursing|teacher|instructor|professor|tutor|manager|director|lead|head|senior|junior|associate|analyst|specialist|coordinator|consultant|technician|accountant|designer|recruiter|sales|marketing|chef|driver|waiter|waitress|pharmacist|doctor|physician|therapist|aide|clerk|assistant|supervisor|executive|officer|architect|scientist|intern|student|administrator|editor|writer|advisor|counselor|counsellor|librarian|operator|barista|technologist|trainer)\b/i;
+
+function parseRoleCompanyHeader(header: string): { role: string; company: string; location: string } {
+  let location = '';
+  let parts = header.split('|').map(p => p.trim()).filter(Boolean);
+
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    if (/^[A-Z][A-Za-z.\s]+,\s*[A-Z]{2}$/.test(last)) {
+      location = last;
+      parts = parts.slice(0, -1);
+    }
+  }
+
+  if (parts.length === 0) return { role: '', company: '', location };
+
+  if (parts.length === 1) {
+    const atMatch = parts[0].split(/\s+at\s+/i);
+    if (atMatch.length === 2) {
+      return { role: atMatch[0].trim(), company: atMatch[1].trim(), location };
+    }
+    const sub = parts[0].split(',').map(p => p.trim()).filter(Boolean);
+    if (sub.length >= 2) {
+      const roleIdx = sub.findIndex(p => ROLE_KEYWORD.test(p));
+      if (roleIdx > 0) {
+        return { role: sub[roleIdx], company: sub.filter((_, i) => i !== roleIdx).join(', '), location };
+      }
+      return { role: sub[0], company: sub.slice(1).join(', '), location };
+    }
+    return { role: parts[0], company: '', location };
+  }
+
+  const roleIdx = parts.findIndex(p => ROLE_KEYWORD.test(p));
+  if (roleIdx >= 0) {
+    return { role: parts[roleIdx], company: parts.filter((_, i) => i !== roleIdx).join(', '), location };
+  }
+  return { role: parts[0], company: parts.slice(1).join(', '), location };
+}
+
+const SECTION_HEADER_LINE = /^(exposure|experience|work history|work experience|employment|employment history|professional experience|clinical experience|teaching experience|relevant experience|internships?|projects?|education|skills|technical skills|certifications?|licenses?|licences?|summary|professional summary|objective|profile|references|languages|interests|achievements|awards|honors|publications|volunteering|volunteer experience)\s*$/i;
+
 function extractExperience(text: string): ExperienceEntry[] {
   const experiences: ExperienceEntry[] = [];
-  
+
   const expSection = getSectionText(text, 'experience');
   if (!expSection) {
     console.log('No experience section found');
     return experiences;
   }
-  
-  console.log('Experience section (first 1000 chars):', expSection.slice(0, 1000));
-  
-  // Split by common delimiters
-  const entries = expSection.split(/\n\s*\n|\n(?=[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s*(?:[-–]|at|,|\d{4}))/g);
-  
-  entries.forEach((entry, index) => {
-    if (entry.trim().length < 20) return; // Skip very short entries
-    
-    const lines = entry.split('\n').map(l => l.trim()).filter(l => l);
-    if (lines.length === 0) return;
-    
-    // Try to parse company and role
-    let company = '';
-    let role = '';
+
+  const datePattern = /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–to]+\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|Present|Current|\d{4}|Now)/i;
+  const bulletPattern = /^[•\-*·●○►▸]/;
+
+  const lines = expSection
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !SECTION_HEADER_LINE.test(l));
+
+  // Group into entries: each entry is a header line + date line + following bullets/paragraphs
+  const groups: string[][] = [];
+  let current: string[] = [];
+  lines.forEach(line => {
+    if (datePattern.test(line)) {
+      const last = current[current.length - 1];
+      if (current.length >= 2 && last && !bulletPattern.test(last) && !datePattern.test(last)) {
+        const header = last;
+        const prior = current.slice(0, -1);
+        if (prior.length) groups.push(prior);
+        current = [header, line];
+      } else {
+        current.push(line);
+      }
+    } else {
+      current.push(line);
+    }
+  });
+  if (current.length) groups.push(current);
+
+  groups.forEach((entryLines, index) => {
+    const entryText = entryLines.join('\n');
+    if (entryText.trim().length < 20) return;
+
+    const { role, company, location } = parseRoleCompanyHeader(entryLines[0] || '');
+
+    const dateIdx = entryLines.findIndex(l => datePattern.test(l));
     let startDate = '';
     let endDate = '';
-    let current = false;
+    let currentFlag = false;
+    if (dateIdx >= 0) {
+      const match = entryLines[dateIdx].match(datePattern);
+      if (match) {
+        startDate = parseDate(match[1]);
+        endDate = parseDate(match[2]);
+        currentFlag = /present|current|now/i.test(match[2]);
+      }
+    }
+
     const responsibilities: string[] = [];
     const technologies: string[] = [];
     const achievements: string[] = [];
-    
-    // Date pattern
-    const datePattern = /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–to]+\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}|Present|Current|\d{4}|Now)/i;
-    
-    // Parse first few lines for company, role, dates
-    for (let i = 0; i < Math.min(3, lines.length); i++) {
-      const line = lines[i];
-      const dateMatch = line.match(datePattern);
-      
-      if (dateMatch) {
-        startDate = parseDate(dateMatch[1]);
-        endDate = parseDate(dateMatch[2]);
-        current = /present|current|now/i.test(dateMatch[2]);
-        
-        // Extract company/role from the same line
-        const withoutDate = line.replace(datePattern, '').trim();
-        const parts = withoutDate.split(/[|•\-–,]/).map(p => p.trim()).filter(p => p);
-        
-        if (parts.length >= 2) {
-          company = parts[0];
-          role = parts[1];
-        } else if (parts.length === 1) {
-          if (!company) company = parts[0];
-        }
-      } else if (!company && line.length < 60) {
-        // First non-date line is likely company
-        company = line;
-      } else if (!role && line.length < 60 && !datePattern.test(line)) {
-        role = line;
-      }
-    }
-    
-    // Parse remaining lines for responsibilities and technologies
-    for (let i = 3; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Skip empty or very short lines
+
+    const bodyStart = dateIdx >= 0 ? dateIdx + 1 : 1;
+    for (let i = bodyStart; i < entryLines.length; i++) {
+      const line = entryLines[i];
       if (line.length < 5) continue;
-      
-      // Check for bullet points
-      if (/^[•\-*·●○►▸►]/.test(line)) {
-        const cleaned = line.replace(/^[•\-*·●○►▸►]\s*/, '');
+
+      if (bulletPattern.test(line)) {
+        const cleaned = line.replace(bulletPattern, '').trim();
         responsibilities.push(cleaned);
-        
-        // Extract technologies mentioned
-        TECH_SKILLS.forEach(tech => {
-          if (line.toLowerCase().includes(tech)) {
-            if (!technologies.includes(tech)) {
-              technologies.push(tech);
-            }
+
+        ALL_SKILLS.forEach(skill => {
+          if (skillPattern(skill).test(line) && !technologies.includes(skill)) {
+            technologies.push(skill);
           }
         });
-        
-        // Check for achievements (contain metrics)
-        if (/\d+%|\d+\s*(users|customers|clients|requests|queries|transactions)/i.test(line)) {
+
+        if (hasQuantifiedAchievement(line)) {
           achievements.push(cleaned);
         }
-      } else if (line.length > 10 && !datePattern.test(line)) {
-        // Non-bullet lines might be responsibilities
+      } else if (!datePattern.test(line) && line.length > 10) {
         responsibilities.push(line);
       }
     }
-    
-    // Only add if we have meaningful data
+
     if (company || role) {
       experiences.push({
         id: `exp_${Date.now()}_${index}`,
-        company: company || 'Unknown Company',
+        company: company || 'Unknown Organization',
         role: role || 'Position',
         startDate,
         endDate,
-        current,
-        location: '',
+        current: currentFlag,
+        location,
         responsibilities,
         technologies,
         achievements,
-        metrics: [],
+        metrics: extractMetricClaims(entryText),
       });
     }
   });
-  
+
   console.log(`Extracted ${experiences.length} experience entries`);
   return experiences;
 }
@@ -608,16 +725,16 @@ function extractEducation(text: string): EducationEntry[] {
   
   console.log('Education section (first 500 chars):', eduSection.slice(0, 500));
   
-  // Degree patterns
+  // Degree / credential patterns across education systems
   const degreePatterns = [
-    /(Bachelor|Master|PhD|Ph\.D|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc|B\.?A|M\.?A|MBA|BBA|BCA|MCA)['s]*\s*(?:of\s+)?(?:Science|Arts|Engineering|Technology|Computer Science|Business)?/gi,
-    /(B\.?S\.?|M\.?S\.?|B\.?A\.?|M\.?A\.?|B\.?E\.?|M\.?E\.?|B\.?Tech|M\.?Tech|PhD|MBA|BCA|MCA|BBA)/gi,
+    /(Bachelor|Master|Doctorate|Doctoral|PhD|Ph\.D|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc|B\.?A|M\.?A|MBA|BBA|BCA|MCA|Associate|Diploma|Certificate|Certification|High School Diploma|GED|HSC|SSC|A-Levels?|O-Levels?)/gi,
+    /(B\.?S\.?|M\.?S\.?|BSc|MSc|BA|MA|BE|ME|RN|LPN|CNA|LLB|JD|MD|DDS|DVM|PharmD|BSN|MSN|DNP)/g,
   ];
   
   // Institution patterns
   const institutionPatterns = [
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:University|College|Institute|School|Academy)))/g,
-    /((?:University|College|Institute)\s+(?:of\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g,
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:University|College|Institute|School|Academy|Polytechnic|Seminary|Conservatory)))/g,
+    /((?:University|College|Institute|School|Academy|Polytechnic)\s+(?:of\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g,
   ];
   
   // Split into entries
@@ -670,7 +787,7 @@ function extractEducation(text: string): EducationEntry[] {
         id: `edu_${Date.now()}_${index}`,
         institution: institution || entry.split('\n')[0].slice(0, 100),
         degree: degree || 'Degree',
-        field: field || 'Computer Science',
+        field: field || '',
         startDate,
         endDate,
         gpa: '',
@@ -717,45 +834,36 @@ function extractProjects(text: string): ProjectEntry[] {
     // Combine remaining lines for description
     const description = lines.slice(1).join(' ');
     
-    // Find technologies
+    // Find skills/technologies across industries mentioned in this entry
     const projectTechs: string[] = [];
-    TECH_SKILLS.forEach(tech => {
-      if (entry.toLowerCase().includes(tech)) {
+    ALL_SKILLS.forEach(tech => {
+      if (skillPattern(tech).test(entry) && !projectTechs.includes(tech)) {
         projectTechs.push(tech);
       }
     });
     
-    // Check for GitHub link
-    const githubMatch = entry.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-]+/gi);
+    // Find any public links (repository, portfolio, publication, demo)
+    const linkMatches = entry.match(/https?:\/\/[^\s)]+/gi) || [];
+    const githubMatch = linkMatches.find(u => u.toLowerCase().includes('github.com'));
+    const portfolioMatch = linkMatches.find(u => {
+      const lower = u.toLowerCase();
+      return !lower.includes('linkedin.com') && u !== githubMatch;
+    });
+    const demoMatch = portfolioMatch ? [portfolioMatch] : null;
     
-    // Check for demo link
-    const demoMatch = entry.match(/(?:https?:\/\/)?(?:www\.)?(?!github)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?/gi);
-    
-    // Calculate depth score based on available information
+    // Calculate depth score based on available information (field-agnostic)
     const depthItems = {
       hasDescription: description.length > 20,
-      hasTechnologies: projectTechs.length > 0,
-      hasGitHub: !!githubMatch,
-      hasMetrics: /\d+%|\d+\s*(users|customers|requests|queries)/i.test(description),
-      hasProblem: /problem|challenge|issue|solve/i.test(description),
-      hasSolution: /solution|implemented|built|developed|created/i.test(description),
+      hasSkills: projectTechs.length > 0,
+      hasLink: linkMatches.length > 0,
+      hasMetrics: hasQuantifiedAchievement(description),
+      hasProblem: /problem|challenge|issue|solve|goal|objective|need|requirement/i.test(description),
+      hasSolution: /solution|implemented|built|developed|created|designed|launched|delivered|managed|led|improved|reduced|increased/i.test(description),
     };
     const depthScore = Math.round((Object.values(depthItems).filter(Boolean).length / 6) * 100);
     
-    // Extract metrics
-    const metrics: MetricClaim[] = [];
-    const metricMatches = description.matchAll(/(\d+(?:\.\d+)?)\s*%\s*(improvement|increase|reduction|growth|faster|slower)/gi);
-    for (const match of metricMatches) {
-      metrics.push({
-        id: `metric_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        claim: match[0],
-        value: parseFloat(match[1]),
-        unit: match[2],
-        context: description.slice(Math.max(0, match.index! - 50), match.index! + match[0].length + 50),
-        supportLevel: 'medium',
-        verification: 'Metric requires additional context',
-      });
-    }
+    // Extract quantified claims
+    const metrics: MetricClaim[] = extractMetricClaims(description);
     
     projects.push({
       id: `proj_${Date.now()}_${index}`,
@@ -764,7 +872,7 @@ function extractProjects(text: string): ProjectEntry[] {
       technologies: projectTechs,
       features: [],
       metrics,
-      github: githubMatch ? githubMatch[0] : undefined,
+      github: githubMatch,
       demo: demoMatch ? demoMatch[0] : undefined,
       depthScore,
     });
@@ -774,48 +882,55 @@ function extractProjects(text: string): ProjectEntry[] {
   return projects;
 }
 
-// Extract certifications
+// Extract certifications, licences and credentials (any industry)
 function extractCertifications(text: string): CertificationEntry[] {
   const certifications: CertificationEntry[] = [];
+  const seen = new Set<string>();
   
-  const certSection = getSectionText(text, 'certifications');
-  const textToSearch = certSection || text;
+  const push = (name: string, source: string) => {
+    const cleaned = name.replace(/^[•\-*·–]\s*/, '').replace(/\s+/g, ' ').trim();
+    if (cleaned.length < 3 || cleaned.length > 120) return;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) return;
+    const yearMatch = source.match(/\b(19|20)\d{2}\b/);
+    seen.add(key);
+    certifications.push({
+      id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: cleaned,
+      issuer: '',
+      date: yearMatch ? yearMatch[0] : '',
+      credentialId: '',
+      url: '',
+    });
+  };
   
-  const certPatterns = [
-    /(AWS|Azure|GCP|Google Cloud)\s*(?:Certified|Solutions?)?\s*(?:Architect|Developer|Administrator|Engineer|Practitioner)?/gi,
-    /(PMP|Project Management Professional)/gi,
-    /(Certified Scrum Master|CSM|PSM)/gi,
-    /(CISSP|CISA|CISM)/gi,
-    /(CCNA|CCNP|CCIE)/gi,
-    /(Microsoft Certified|MCSE|MCSA)/gi,
-    /(Oracle Certified|OCP|OCA)/gi,
-    /(Google Certified)/gi,
-    /(Salesforce Certified)/gi,
-    /(Tableau Certified)/gi,
-    /(Kubernetes Certified|CKA|CKAD)/gi,
-  ];
+  // 1) Read the certifications / licences / credentials section line by line
+  const certSection = getSectionTextAny(text, ['certifications', 'training']);
+  if (certSection) {
+    const lines = certSection.split('\n').map(l => l.trim()).filter(Boolean);
+    lines.forEach((line, index) => {
+      if (index === 0 && /^(certifications?|certificates?|licen[cs]es?|credentials?|training|courses?)/i.test(line)) return;
+      if (line.length < 4) return;
+      if (/^(professional development|training)$/i.test(line)) return;
+      if (/[,;]/.test(line) && !/\b(19|20)\d{2}\b/.test(line)) {
+        line.split(/[,;]/).forEach(part => push(part, line));
+      } else {
+        push(line, line);
+      }
+    });
+  }
   
-  certPatterns.forEach(pattern => {
-    const matches = textToSearch.matchAll(pattern);
-    for (const match of matches) {
-      const certName = match[0];
-      
-      // Avoid duplicates
-      if (certifications.some(c => c.name === certName)) continue;
-      
-      // Extract year
-      const yearMatch = textToSearch.match(/\b(20)\d{2}\b/);
-      
-      certifications.push({
-        id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: certName,
-        issuer: '',
-        date: yearMatch ? yearMatch[0] : '',
-        credentialId: '',
-        url: '',
-      });
-    }
-  });
+  // 2) Keyword scan for inline mentions when few section entries were found
+  if (certifications.length < 3) {
+    const textLower = text.toLowerCase();
+    CERTIFICATION_KEYWORDS.forEach(keyword => {
+      if (textLower.includes(keyword)) {
+        const regex = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const match = text.match(regex);
+        push(match ? match[0] : keyword, text);
+      }
+    });
+  }
   
   console.log(`Extracted ${certifications.length} certifications`);
   return certifications;
@@ -840,7 +955,7 @@ function extractSummary(text: string): string {
     const cleaned = para.trim();
     // Skip if it looks like a section header or contact info
     if (cleaned.length > 50 && cleaned.length < 500 &&
-        !/^(experience|education|skills|projects|certifications)/i.test(cleaned) &&
+        !/^(experience|education|skills|projects|certifications|licen[cs]es|achievements|awards|publications|training|volunteer|portfolio)/i.test(cleaned) &&
         !/@/.test(cleaned) &&
         !/^\d+$/.test(cleaned)) {
       return cleaned;
@@ -851,6 +966,68 @@ function extractSummary(text: string): string {
 }
 
 // Main parsing function
+export function parseResumeText(text: string, id: string, fileName: string, fileSize: number, version: number): ParsedResume {
+  // Extract all components
+  const name = extractName(text);
+  const email = extractEmail(text);
+  const phone = extractPhone(text);
+  const location = extractLocation(text);
+  const summary = extractSummary(text);
+  const linkedin = extractLinkedIn(text);
+  const github = extractGitHub(text);
+  const portfolio = extractPortfolio(text);
+  const portfolioLinks = extractPortfolioLinks(text);
+  const skills = extractSkills(text);
+  const experience = extractExperience(text);
+  const education = extractEducation(text);
+  const projects = extractProjects(text);
+  const certifications = extractCertifications(text);
+
+  console.log('Parsed data:', {
+    name,
+    email,
+    phone,
+    location,
+    skillsCount: skills.length,
+    experienceCount: experience.length,
+    educationCount: education.length,
+    projectsCount: projects.length,
+    certificationsCount: certifications.length,
+  });
+
+  return {
+    id,
+    fileName,
+    fileSize,
+    uploadedAt: new Date(),
+    status: 'completed',
+    version,
+
+    candidate: {
+      name,
+      email,
+      phone,
+      location,
+      summary,
+      links: {
+        github: github || undefined,
+        linkedin: linkedin || undefined,
+        portfolio: portfolio || undefined,
+        other: portfolioLinks.filter(url => url !== portfolio && url !== github),
+      },
+    },
+
+    education,
+    experience,
+    internships: [],
+    projects,
+    skills,
+    certifications,
+    achievements: [],
+    publications: [],
+  };
+}
+
 export async function parseResume(file: File, id: string, version: number): Promise<ParsedResume> {
   console.log('Starting resume parsing for:', file.name);
   
@@ -863,64 +1040,5 @@ export async function parseResume(file: File, id: string, version: number): Prom
   
   console.log('Extracted text length:', text.length);
   
-  // Extract all components
-  const name = extractName(text);
-  const email = extractEmail(text);
-  const phone = extractPhone(text);
-  const location = extractLocation(text);
-  const summary = extractSummary(text);
-  const linkedin = extractLinkedIn(text);
-  const github = extractGitHub(text);
-  const portfolio = extractPortfolio(text);
-  const skills = extractSkills(text);
-  const experience = extractExperience(text);
-  const education = extractEducation(text);
-  const projects = extractProjects(text);
-  const certifications = extractCertifications(text);
-  
-  console.log('Parsed data:', {
-    name,
-    email,
-    phone,
-    location,
-    skillsCount: skills.length,
-    experienceCount: experience.length,
-    educationCount: education.length,
-    projectsCount: projects.length,
-    certificationsCount: certifications.length,
-  });
-  
-  const parsedResume: ParsedResume = {
-    id,
-    fileName: file.name,
-    fileSize: file.size,
-    uploadedAt: new Date(),
-    status: 'completed',
-    version,
-    
-    candidate: {
-      name,
-      email,
-      phone,
-      location,
-      summary,
-      links: {
-        github: github || undefined,
-        linkedin: linkedin || undefined,
-        portfolio: portfolio || undefined,
-        other: [],
-      },
-    },
-    
-    education,
-    experience,
-    internships: [],
-    projects,
-    skills,
-    certifications,
-    achievements: [],
-    publications: [],
-  };
-  
-  return parsedResume;
+  return parseResumeText(text, id, file.name, file.size, version);
 }

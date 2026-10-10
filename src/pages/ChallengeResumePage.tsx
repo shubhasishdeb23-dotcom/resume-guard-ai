@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -13,7 +13,6 @@ import {
   Brain,
   FileText,
   Eye,
-  Download,
   HelpCircle,
 } from 'lucide-react';
 import { DEMO_CANDIDATES } from '../data/demoCandidates';
@@ -85,10 +84,14 @@ const ChallengeResumePage: React.FC = () => {
               <span className="text-lg font-bold text-white">Challenge This Resume</span>
             </div>
             
-            <button className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-4 py-2 rounded-xl transition-colors">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate(`/recruiter/interview/${candidateId}`)}
+                className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+              >
+                Start mock interview
+              </button>
+            </div>
           </div>
         </div>
       </header>

@@ -693,11 +693,11 @@ const VerificationPage: React.FC = () => {
                       {[
                         { label: 'Problem', present: proj.hasProblem },
                         { label: 'Solution', present: proj.hasImplementation },
-                        { label: 'Tech', present: proj.hasTechnology },
+                        { label: 'Tools', present: proj.hasTechnology },
                         { label: 'Role', present: proj.hasRole },
                         { label: 'Deploy', present: proj.hasDeployment },
                         { label: 'Metrics', present: proj.hasMetrics },
-                        { label: 'GitHub', present: proj.hasGitHub },
+                        { label: 'Public link', present: proj.hasGitHub },
                         { label: 'Demo', present: proj.hasDemo },
                       ].map((item, i) => (
                         <div key={i} className="flex items-center gap-1">

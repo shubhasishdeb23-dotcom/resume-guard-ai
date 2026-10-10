@@ -11,10 +11,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const depthItems = [
     { label: 'Problem', present: !!project.problem },
     { label: 'Solution', present: !!project.solution },
-    { label: 'Technologies', present: project.technologies.length > 0 },
+    { label: 'Tools / Skills', present: project.technologies.length > 0 },
     { label: 'Features', present: project.features.length > 0 },
     { label: 'Metrics', present: project.metrics.length > 0 },
-    { label: 'GitHub', present: !!project.github },
+    { label: 'Public link', present: !!(project.github || project.demo) },
   ];
   
   const presentCount = depthItems.filter(i => i.present).length;
