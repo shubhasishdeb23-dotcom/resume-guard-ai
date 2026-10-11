@@ -46,7 +46,7 @@ export function buildEmployerBrief(
   if (supported.length > 0) {
     strengths.push(`Skills with direct evidence: ${supported.slice(0, 6).join(', ')}.`);
   }
-  const quantified = resume?.experience.filter(e => e.achievements.length > 0 || e.metrics.length > 0) || [];
+  const quantified = resume?.experience.filter(e => (e.achievements?.length ?? 0) > 0 || (e.metrics?.length ?? 0) > 0) || [];
   if (quantified.length > 0) {
     strengths.push(`${quantified.length} role(s) include measurable outcomes (e.g. ${quantified[0].role}).`);
   }

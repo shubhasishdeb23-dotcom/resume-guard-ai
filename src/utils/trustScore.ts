@@ -49,7 +49,7 @@ export function computeTrustScore(
   const consistency = clamp(100 - suspiciousSignals * 12);
 
   const experiences = resume?.experience ?? [];
-  const withOutcomes = experiences.filter(e => e.achievements.length > 0 || e.metrics.length > 0).length;
+  const withOutcomes = experiences.filter(e => (e.achievements?.length ?? 0) > 0 || (e.metrics?.length ?? 0) > 0).length;
   const quantified = experiences.length > 0 ? clamp(Math.round((withOutcomes / experiences.length) * 100)) : 60;
 
   const factors: TrustFactor[] = [
