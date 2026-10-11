@@ -41,6 +41,7 @@ interface RecruiterContextType {
   
   makeDecision: (candidateId: string, decision: RecruiterDecision['decision'], notes: string) => void;
   
+  loadCommonRoles: () => void;
   loadDemoData: () => void;
   getMatch: (candidateId: string) => CandidateMatch | null;
   getCandidate: (candidateId: string) => CandidateProfile | null;
@@ -270,6 +271,29 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     updateCandidateStatus(candidateId, 'decided');
   }, [currentJob, updateCandidateStatus]);
 
+  const loadCommonRoles = useCallback(() => {
+    const presets = [
+      { title: 'AI/ML Engineer', company: 'TechCorp AI', text: DEMO_JOB.rawText },
+      { title: 'Software Engineer', company: 'TechCorp', text: 'Software Engineer. Requirements: 3+ years software development, Python/JavaScript, Git, problem-solving, testing.' },
+      { title: 'Frontend Engineer', company: 'TechCorp', text: 'Frontend Engineer. Requirements: React, TypeScript, CSS, responsive design, accessibility.' },
+      { title: 'Backend Engineer', company: 'TechCorp', text: 'Backend Engineer. Requirements: Node.js/Express, REST APIs, SQL/NoSQL, authentication, scalability.' },
+      { title: 'Data Scientist', company: 'DataCorp', text: 'Data Scientist. Requirements: Python, statistics, ML, pandas, visualization, SQL.' },
+      { title: 'Nurse', company: 'HealthCare', text: 'Registered Nurse. Requirements: BSN/RN, patient care, documentation, critical thinking, empathy.' },
+      { title: 'Teacher', company: 'EduCorp', text: 'Teacher. Requirements: teaching credential, lesson planning, classroom management, communication.' },
+    ];
+    const newJobs = presets.map(p => ({
+      id: uuidv4(),
+      title: p.title,
+      company: p.company,
+      rawText: p.text,
+      extracted: parseJobDescription(p.text),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    setJobs(newJobs);
+    setCurrentJobId(newJobs[0].id);
+  }, []);
+
   const loadDemoData = useCallback(() => {
     const demoJob: JobDescription = {
       ...DEMO_JOB,
@@ -382,6 +406,7 @@ export const RecruiterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       toggleShortlist,
       setShortlistWeights,
       makeDecision,
+      loadCommonRoles,
       loadDemoData,
       getMatch,
       getCandidate,

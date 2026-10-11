@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { COMMON_PROFESSIONS } from '../data/professions';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,6 +36,7 @@ const RecruiterDashboard: React.FC = () => {
     candidates, 
     matches, 
     analytics, 
+    loadCommonRoles,
     loadDemoData,
     selectJob,
     createJob,
@@ -167,7 +168,7 @@ const RecruiterDashboard: React.FC = () => {
                 {currentJob?.title || 'Select or Create a Job'}
               </h1>
               <p className="text-slate-400 mt-1">
-                {currentJob?.company || 'TechCorp AI'} • {currentJob?.location || 'San Francisco, CA'}
+                {currentJob?.company || 'TechCorp AI'} â€¢ {currentJob?.location || 'San Francisco, CA'}
               </p>
             </div>
             
@@ -183,6 +184,22 @@ const RecruiterDashboard: React.FC = () => {
                   ))}
                 </select>
               )}
+              <button
+                onClick={loadCommonRoles}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl transition-colors"
+                title="Load common professions as job options"
+              >
+                <Zap className="w-4 h-4" />
+                Load Common Roles
+              </button>
+              <button
+                onClick={loadCommonRoles}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl transition-colors"
+                title="Load common professions as job options"
+              >
+                <Zap className="w-4 h-4" />
+                Load Common Roles
+              </button>
               <button
                 onClick={loadDemoData}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2.5 rounded-xl transition-colors"
@@ -486,7 +503,7 @@ const RecruiterDashboard: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-white">Transparent shortlist</h3>
-                    <p className="text-sm text-slate-400">Weighted job fit, evidence, skills, and risk — formula shown</p>
+                    <p className="text-sm text-slate-400">Weighted job fit, evidence, skills, and risk â€” formula shown</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-slate-400" />
@@ -567,7 +584,7 @@ const RecruiterDashboard: React.FC = () => {
                 </div>
               </div>
               <p className="text-sm text-emerald-200 mt-4 font-medium">
-                AI is a component of ResumeGuard — not the product itself.
+                AI is a component of ResumeGuard â€” not the product itself.
               </p>
             </div>
           </div>
