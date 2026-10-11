@@ -121,23 +121,25 @@ export function interviewConfidence(session: InterviewSession): InterviewConfide
     : null;
 
   let level: InterviewConfidence['level'] = 'mixed';
-  if (avg >= 65 && weakAnswers === 0 && (verificationAvg === null || verificationAvg >= 55)) {
+  // Stricter thresholds for "strong" - require good substantiation of credentials when probed
+  const credProbed = verificationAnswers.length > 0;
+  if (avg >= 70 && weakAnswers <= 0 && (!credProbed || verificationAvg! >= 65)) {
     level = 'strong';
-  } else if (avg < 40 || weakAnswers >= 2 || (verificationAvg !== null && verificationAvg < 35)) {
+  } else if (avg < 45 || weakAnswers >= 2 || (credProbed && verificationAvg! < 40)) {
     level = 'weak';
   }
 
   const label = level === 'strong'
-    ? 'Strong confidence — claimed skills and credentials backed by consistent, specific detail'
+    ? 'Strong confidence - claimed skills/credentials substantiated with specifics and verifiable detail'
     : level === 'weak'
-      ? 'Weak confidence — claims were vague, evasive, or inconsistent under questioning'
-      : 'Mixed confidence — some claims are well supported, others need follow-up';
+      ? 'Weak confidence - claims were vague, evasive, or failed to provide verifiable specifics under probing'
+      : 'Mixed confidence - some claims substantiated, others require verification';
 
   const rationale =
     `Average ${avg}% across ${session.answers.length} answer(s)` +
-    (verificationAvg !== null ? `, ${verificationAvg}% on credential/verification questions` : '') +
-    (weakAnswers ? `, ${weakAnswers} weak answer(s)` : '') +
-    '. This reflects answer consistency and specificity only — it is not a fraud or credential-verification determination.';
+    (verificationAvg !== null ? `, ${verificationAvg}% on credential/verification questions (${verificationAnswers.length} probed)` : '') +
+    (weakAnswers ? `, ${weakAnswers} evasive/vague answer(s)` : '') +
+    '. Signals: consistency, specificity, evidence readiness (transcripts/cert IDs/issuer lookup). This is a plausibility assessment only - not an automated fraud or degree verification.';
 
   return { level, label, rationale };
 }

@@ -102,10 +102,26 @@ export function generateChallengeReport(
       id: `ciq_edu_${candidate.id}_${i}`,
       category: 'credential',
       claim: `Education: ${label || 'degree on file'}`,
-      question: `Your resume lists ${label || 'a degree'}${years ? ` (${years})` : ''}. Walk us through the coursework, thesis or capstone most relevant to this role, and what credential documentation you can provide.`,
-      followUp: ['Which institution and graduation year should we verify?', 'What did you personally produce for your final project?'],
-      priority: 'medium',
-      reason: 'A degree cannot be verified from the resume text alone — confirm institution, dates and specifics.',
+      question: `Your resume lists ${label || 'a degree'}${years ? ` (${years})` : ''}. Can you provide the exact dates (month/year), the institution's full name and location, and describe specific coursework, labs, or a thesis/capstone directly relevant to this role?`,
+      followUp: [
+        'Which courses best map to the required skills, and what deliverables did you produce?',
+        'If requested, who at the registrar could verify your degree/enrollment?',
+        'Can you describe one academic project in detail with quantifiable outcomes?',
+      ],
+      priority: 'high',
+      reason: 'Plausibility check: verifiable details help distinguish genuine academic claims from vague embellishments.',
+    });
+    credentialQuestions.push({
+      id: `ciq_edu_verify_${candidate.id}_${i}`,
+      category: 'credential',
+      claim: `Education verification: ${label || 'degree on file'}`,
+      question: `Would you be able to provide an official transcript or third-party verification for this credential today? If not, what is the typical turnaround and issuing authority?`,
+      followUp: [
+        'Is this listed in the institution’s degree verification system (with a URL or process)?',
+        'Were there any gaps, transfers, or part-time periods affecting the stated timeline?',
+      ],
+      priority: 'high',
+      reason: 'Evidence readiness is an authenticity signal - claims should be readily verifiable.',
     });
   });
 
@@ -117,10 +133,14 @@ export function generateChallengeReport(
       id: `ciq_cert_${candidate.id}_${i}`,
       category: 'credential',
       claim: `Certification: ${name}${issuer}`,
-      question: `You list ${name}${issuer}${when}. ${cert.credentialId ? `The credential ID on file is ${cert.credentialId}. ` : ''}How did you apply it on the job, and how could we confirm it with the issuing body?`,
-      followUp: ['What is the credential ID or registry we could check?', 'How did it change how you work?'],
-      priority: 'medium',
-      reason: 'Certifications should be confirmed with the issuing body.',
+      question: `You list ${name}${issuer}${when}. ${cert.credentialId ? `Your ID given is ${cert.credentialId}. ` : ''}Can you describe the specific tasks, exam objectives, or hands-on work from this certification that you’ve applied to real projects?`,
+      followUp: [
+        'How would we verify this certification through the issuing body’s online lookup?',
+        'When does it expire, and do you maintain it (CEUs)?',
+        'What is the exact title/level as shown on your certificate?',
+      ],
+      priority: 'high',
+      reason: 'Credential authenticity: being able to map it to concrete work and verify through the issuer strengthens genuineness.',
     });
   });
 
