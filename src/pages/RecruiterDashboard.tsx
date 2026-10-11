@@ -192,14 +192,7 @@ const RecruiterDashboard: React.FC = () => {
                 <Zap className="w-4 h-4" />
                 Load Common Roles
               </button>
-              <button
-                onClick={loadCommonRoles}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl transition-colors"
-                title="Load common professions as job options"
-              >
-                <Zap className="w-4 h-4" />
-                Load Common Roles
-              </button>
+              
               <button
                 onClick={loadDemoData}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2.5 rounded-xl transition-colors"
