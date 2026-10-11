@@ -457,7 +457,7 @@ const CandidateDetailPage: React.FC = () => {
           </motion.div>
         </div>
 
-        {/* Skill Impact Simulator (detailed mode only) */}
+        {/* Skill Intelligence - What-if Analysis (detailed mode only) */}
         {viewMode === 'detailed' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -466,10 +466,10 @@ const CandidateDetailPage: React.FC = () => {
         >
           <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <Brain className="w-5 h-5 text-cyan-400" />
-            Industry Skill Simulator
+            Skill Intelligence: What-if Analysis
           </h3>
           <p className="text-sm text-slate-400 mb-4">
-            Select the missing skills this candidate could realistically add, and see the projected impact on the score against {currentJob ? currentJob.title : 'the role'}.
+            See how this candidate's fit improves if they gain specific missing skills. Choose skills they could realistically acquire to see projected changes in fit, skill match, and overall score for {currentJob ? currentJob.title : 'this role'}.
           </p>
           {skillOptions.length === 0 ? (
             <p className="text-sm text-slate-400">No addable job skills are on file — the candidate already covers the parsed requirements, or no job is selected.</p>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { COMMON_PROFESSIONS } from '../data/professions';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -163,7 +164,7 @@ const RecruiterDashboard: React.FC = () => {
                 <span>Active Position</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white">
-                {currentJob?.title || 'AI/ML Engineer'}
+                {currentJob?.title || 'Select or Create a Job'}
               </h1>
               <p className="text-slate-400 mt-1">
                 {currentJob?.company || 'TechCorp AI'} • {currentJob?.location || 'San Francisco, CA'}
@@ -603,12 +604,22 @@ const RecruiterDashboard: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">Job Title</label>
+                  <select
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Select a profession</option>
+                    {COMMON_PROFESSIONS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                   <input
                     type="text"
                     value={jobTitle}
                     onChange={(e) => setJobTitle(e.target.value)}
-                    placeholder="e.g. Senior Frontend Engineer"
-                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
+                    placeholder="Or type custom job title"
+                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 mt-2 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
